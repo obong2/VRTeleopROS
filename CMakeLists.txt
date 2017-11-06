@@ -23,6 +23,7 @@ find_package(catkin REQUIRED COMPONENTS message_generation roscpp nav_msgs geome
 add_message_files(
   FILES
   BumperState.msg
+  PathName.msg
 )
 #uncomment if you have defined services
 #add_service_files(
