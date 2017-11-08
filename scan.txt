@@ -1,0 +1,2 @@
+                    Quality=57/70  Signal level=-53 dBm  
+                    ESSID:"PAL3.0"
