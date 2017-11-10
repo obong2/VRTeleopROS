@@ -9,42 +9,56 @@
 #include <iostream>
 //my custom message
 #include <rosaria/PathName.h>
-typedef struct {
-    std::string SSID;
-    double posX;
-    double posY;
-    double sigLevel;
-}AP;
+//my custom service
+#include <rosaria/GetWayPoints.h>
 
 class MyP3AT {
 public:
     MyP3AT(){};
     void Loop();
     void scanWifi();
-//private:
     ros::NodeHandle nh;
-    ros::Publisher pose, sonar;
     ros::Subscriber points;
-    std::map<std::string, double> map;
+    rosaria::PathName msg; 
+    std::map<std::string, int> APmap;
     double cur_posx, cur_posy;
 };
 
-void pathWaypointsMessageReceived(const rosaria::PathName &msg){
-    int length = sizeof(msg.points)/sizeof(std::string);
-    
-    for(int i=0; i<length; i++){
-        std::cout<<msg.points[i];
+void pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::string, int> &APmap){
+  
+    for(int i=0; i<10; i++){
+        std::cout<< msg.points[i] <<std::endl;
+        APmap.insert(std::pair<std::string, int>(msg.points[i], i));
     }
+
+//    ROS_INFO_STREAM("sibal");
+}
+
+void pathfinding(){
+
 }
 
 int main(int argc, char** argv){
     std::FILE* fp;
     ros::init(argc, argv, "teleop");
+    
     MyP3AT myrobot;
+    myrobot = MyP3AT();
+    //myrobot.points = myrobot.nh.subscribe("pathwaypoints", 1000, &pathWaypointsMessageReceived);
+    boost::shared_ptr<rosaria::PathName const> sharedPtr;
 
-    myrobot.points = myrobot.nh.subscribe("pathwaypoints", 1000, &pathWaypointsMessageReceived);
+    sharedPtr = ros::topic::waitForMessage<rosaria::PathName>("pathwaypoints", myrobot.nh);
+    if(sharedPtr == NULL){
+        ROS_ERROR("Failed to get waypoints!");
+        return 1;
+    }
+    else{
+        myrobot.msg = *sharedPtr;
+        pathWaypointsMessageReceived(myrobot.msg, myrobot.APmap);
+    }
+
     myrobot.scanWifi();
-    //signal(SIGINT,quit);
+    
     fp = std::fopen("scan.txt", "rw");
     if(fp == NULL){
         std::cout << "File open error" <<std::endl;
@@ -53,13 +67,12 @@ int main(int argc, char** argv){
 
     //myrobot.Loop();
     std::fclose(fp);
+    ros::spin();
     return (0);
 }
 
 void MyP3AT::Loop(){
-    while(true){
-
-    }
+    
 }
 
 void MyP3AT::scanWifi(){

@@ -31,8 +31,8 @@ int main(int argc, char** argv){
     << "*     This is ROSARIA interface for ARTeleoperation project!     *" << std::endl
     << "*                                                                *" << std::endl
     << "*       [1] start and request                                    *" << std::endl
-    //<< "*       [2] spin_clockwise                                       *" << std::endl
-    //<< "*       [3] spin_counterclockwise                                *" << std::endl
+    << "*       [2] start a test publisher                               *" << std::endl
+    << "*       [3] print current status                                 *" << std::endl
     //<< "*       [4] teleop                                               *" << std::endl
     //<< "*       [5] enable/disable print_state                           *" << std::endl
     //<< "*       [6] enable_motors                                        *" << std::endl
@@ -57,7 +57,13 @@ int main(int argc, char** argv){
                 a = system("rosrun rosaria teleop"); /* run option 1*/
                 a = system("rosnode kill /print_aria_state "); /*kill the ros print_state node */
                 break;
-
+            case KEYCODE_2:
+                a = system("rosrun rosaria testpub"); /* run option 2*/
+                //a = system("rosnode kill /print_aria_state "); /*kill the ros print_state node */
+                break;
+            case KEYCODE_3:
+                a = system("rosrun rosaria print_state");
+                break;
             case KEYCODE_Q:
                 quit(); // exit the program
                 return false;
