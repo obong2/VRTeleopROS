@@ -55,8 +55,7 @@ else()
 	  link_directories(/usr/local/Aria/lib)
 	endif()
 endif()
-find_package(serial REQUIRED)
-include_directories( ${serial_INCLUDE_DIRS} )
+
 add_executable(RosAria RosAria.cpp LaserPublisher.cpp)
 add_executable(interface Interface.cpp)
 add_executable(print_state print_state.cpp)
@@ -65,7 +64,7 @@ add_executable(testpub testpub.cpp)
 add_dependencies(RosAria rosaria_gencfg)
 add_dependencies(RosAria rosaria_gencpp)
 
-target_link_libraries(RosAria ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${serial_LIBRARIES} Aria pthread dl rt)
+target_link_libraries(RosAria ${catkin_LIBRARIES} ${Boost_LIBRARIES} Aria pthread dl rt)
 target_link_libraries(interface 
    ${catkin_LIBRARIES}
 )
@@ -78,7 +77,6 @@ target_link_libraries(print_state
 
 target_link_libraries(testpub
    ${catkin_LIBRARIES}
-   ${serial_LIBRARIES}
 )
 
 set_target_properties(RosAria PROPERTIES COMPILE_FLAGS "-fPIC")
