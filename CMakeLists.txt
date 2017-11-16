@@ -57,10 +57,10 @@ else()
 endif()
 
 add_executable(RosAria RosAria.cpp LaserPublisher.cpp)
-add_executable(interface Interface.cpp)
+add_executable(interface src/Interface.cpp)
 add_executable(print_state print_state.cpp)
-add_executable(teleop teleop.cpp)
-add_executable(testpub testpub.cpp)
+add_executable(teleop src/teleop.cpp)
+add_executable(testpub src/testpub.cpp)
 add_dependencies(RosAria rosaria_gencfg)
 add_dependencies(RosAria rosaria_gencpp)
 

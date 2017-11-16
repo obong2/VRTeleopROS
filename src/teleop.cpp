@@ -18,8 +18,8 @@
 #include <rosaria/GetWayPoints.h>
 
 #define WINDOWSIZE 3
-#define RANGE 180
-#define PI           3.14159265358979323846  /* pi */
+#define RANGE      180
+#define PI         3.14159265358979323846  /* pi */
 
 namespace patch
 {
@@ -32,36 +32,38 @@ namespace patch
 }
 
 class MyP3AT {
+
 public:
     MyP3AT(){};
     void Loop();
+    void Init();
+    void Terminate();
+
+private:
     //void scanWifi();                            // Scan near wifi
     void serialSetup(std::string port);         // Serial Port setup
-    
+    void setupAPGraph();
+
+    void pathWaypointsMessageReceived(const rosaria::PathName msg, std::map<std::string, int> requestedAPs);
+    void sonarMessageReceived(const sensor_msgs::PointCloud msg);
+    std::vector<std::string> pathfinding();
+
     ros::NodeHandle nh;                         // Node handler
     ros::Subscriber points;                     // subscriber to get waypoints from COM2 with PathName type message
+    ros::Subscriber sonar;                      // subscriber to get sonar sensor values
     ros::Publisher cmdvel;                      // publisher to move a robot
-    rosaria::PathName msg;                      // custom message 
+   
+    rosaria::PathName waypoints;                // custom message 
+    
     std::map<std::string, int> requestedAPs;
     std::map<std::string, double> nearNetworks; // store near wifi with SSID + Signal level
-    double cur_posx, cur_posy;
+    
     int mc;                                     // variable for a serial communication with a motor controller
+    
     std::vector<std::deque<double> > window;     // for moving window average
     std::vector<double> movingaverage;          // current average
+    
 };
-
-void pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::string, int> &requestedAPs){
-  
-    for(int i=0; i<10; i++){
-        std::cout<< msg.points[i] <<std::endl;
-        requestedAPs.insert(std::pair<std::string, int>(msg.points[i], i));
-    }
-
-}
-
-void pathfinding(){
-
-}
 
 double movingwindowaverage(std::deque<double> &data){
     double sum = 0;
@@ -93,49 +95,58 @@ int findstrongestsignal(std::vector<double> arr){
 }
 
 int main(int argc, char** argv){
-    std::FILE* fp;
+    
     ros::init(argc, argv, "teleop");
     
     MyP3AT myrobot;
     myrobot = MyP3AT();
+    
     //myrobot.points = myrobot.nh.subscribe("pathwaypoints", 1000, &pathWaypointsMessageReceived);
-    myrobot.cmdvel = myrobot.nh.advertise<geometry_msgs::Twist>("RosAria/cmd_vel", 10);
+
+    if(argc < 2) {
+        ROS_ERROR("%s", "Add port number as a command argument!");
+        return (1);
+    }
+    else{
+        myrobot.Init();
+        ROS_INFO("%s", "Initialization is done!");
+    }
+
+    myrobot.Loop();
+    
+    return (0);
+}
+
+void MyP3AT::Init(char * argv){
+    serialSetup(argv);
+    
+    sonar = nh.subscribe("RosAria/sonar", 1000, &sonarMessageReceived);
+
+    cmdvel = nh.advertise<geometry_msgs::Twist>("RosAria/cmd_vel", 10);
     boost::shared_ptr<rosaria::PathName const> sharedPtr;
-/*
-    sharedPtr = ros::topic::waitForMessage<rosaria::PathName>("pathwaypoints", myrobot.nh);
+    /*
+    sharedPtr = ros::topic::waitForMessage<rosaria::PathName>("pathwaypoints", nh);
     
     if(sharedPtr == NULL){
         ROS_ERROR("Failed to get waypoints!");
         return 1;
     }
     else{
-        myrobot.msg = *sharedPtr;
-        pathWaypointsMessageReceived(myrobot.msg, myrobot.requestedAPs);
+        waypoints = *sharedPtr;
+        pathWaypointsMessageReceived(waypoints, requestedAPs);
     }
 */
-    if(argc < 2) {
-        ROS_ERROR("%s", "Add port number as a command argument!");
-        return (1);
-    }
-    else{
-        myrobot.serialSetup(argv[1]);
-    }
-    
-    ROS_INFO("%s", "Start scanning near APs...");
-    //myrobot.scanWifi();
-    ROS_INFO("%s", "Done scanning near APs...");
 
     for(int i=0; i<RANGE; i++){
-        myrobot.window.push_back(std::deque<double>()); //add a deque
-        for(int j=0; j<WINDOWSIZE-1; j++) myrobot.window[i].push_back(0);
-        myrobot.movingaverage.push_back(100);
+        window.push_back(std::deque<double>()); //add a deque
+        for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);
+        movingaverage.push_back(100);
     }
+}
 
-    myrobot.Loop();
-    
-    close(myrobot.mc);
+void MyP3AT::Terminate(){
+    close(mc);
     ros::spin();
-    return (0);
 }
 
 void MyP3AT::Loop(){
@@ -147,16 +158,15 @@ void MyP3AT::Loop(){
     std::string line;
     
     signed int cur_sig;
-    std::vector<double> total_sig;
     int maxidx;
 
     write(mc, "$A1M2ID1-085", 13);
-    system("sleep 5.0");
+    system("sleep 4.0");
     //Follow the cur waypoint until the robot arrives
-    while(1){
+    while(1){ //TODO: Change the threshold...
         write(mc, "$A1M2ID1-085", 13);
         system("sleep 5.0");
-        total_sig.clear();
+        
         maxidx = 0;
         for(int i=0; i<RANGE; i++){
             std::string motorcommand = "$A1M2ID1";
@@ -188,7 +198,7 @@ void MyP3AT::Loop(){
                 convertor >> cur_sig;
                 std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
             }
-            //total_sig.push_back(cur_sig);
+            
             //ROS_INFO("%s", "before pushing back window[i]");
             window[i].push_back(cur_sig);
             //ROS_INFO("%s", "after pushing back window[i]");
@@ -278,4 +288,26 @@ void MyP3AT::serialSetup(std::string port){
     tcsetattr(mc, TCSANOW, &newtio);
 
     ROS_INFO("%s", "Serial Port is opend!");
+}
+
+void MyP3AT::setupAPGraph(){
+    std::ifstream tempfile("/home/yeonju/catkin_ws/src/ARTeleOpROS/aplist.txt");
+
+}
+
+void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::string, int> &requestedAPs){
+    
+      for(int i=0; i<10; i++){
+          std::cout<< msg.points[i] <<std::endl;
+          requestedAPs.insert(std::pair<std::string, int>(msg.points[i], i));
+      }
+
+}
+
+void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
+
+}
+
+std::vector<std::string> MyP3AT::pathfinding(){
+
 }
