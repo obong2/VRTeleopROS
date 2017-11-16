@@ -32,7 +32,6 @@ namespace patch
 }
 
 class MyP3AT {
-
 public:
     MyP3AT(){};
     void Loop();
@@ -62,7 +61,8 @@ private:
     
     std::vector<std::deque<double> > window;     // for moving window average
     std::vector<double> movingaverage;          // current average
-    
+
+    Graph test;  
 };
 
 double movingwindowaverage(std::deque<double> &data){
