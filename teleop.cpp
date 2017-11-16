@@ -11,10 +11,15 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <deque>
 //my custom message
 #include <rosaria/PathName.h>
 //my custom service
 #include <rosaria/GetWayPoints.h>
+
+#define WINDOWSIZE 3
+#define RANGE 180
+#define PI           3.14159265358979323846  /* pi */
 
 namespace patch
 {
@@ -30,7 +35,7 @@ class MyP3AT {
 public:
     MyP3AT(){};
     void Loop();
-    void scanWifi();                            // Scan near wifi
+    //void scanWifi();                            // Scan near wifi
     void serialSetup(std::string port);         // Serial Port setup
     
     ros::NodeHandle nh;                         // Node handler
@@ -41,6 +46,8 @@ public:
     std::map<std::string, double> nearNetworks; // store near wifi with SSID + Signal level
     double cur_posx, cur_posy;
     int mc;                                     // variable for a serial communication with a motor controller
+    std::vector<std::deque<double> > window;     // for moving window average
+    std::vector<double> movingaverage;          // current average
 };
 
 void pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::string, int> &requestedAPs){
@@ -49,11 +56,40 @@ void pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::st
         std::cout<< msg.points[i] <<std::endl;
         requestedAPs.insert(std::pair<std::string, int>(msg.points[i], i));
     }
-//    ROS_INFO_STREAM("sibal");
+
 }
 
 void pathfinding(){
 
+}
+
+double movingwindowaverage(std::deque<double> &data){
+    double sum = 0;
+    std::deque<double>::reverse_iterator j;
+    std::cout<<"--------------------------"<<std::endl;
+    for(j = data.rbegin(); j != data.rend(); j++){
+        std::cout<<*j<<std::endl;
+        sum = sum + *j;
+    }
+
+    data.pop_front();
+    
+    return sum/WINDOWSIZE;
+}
+
+int findstrongestsignal(std::vector<double> arr){
+    int minidx;
+    double min;
+    min = arr[0];
+    minidx = 0;
+    for(int i=0; i<RANGE; i++){
+        //std::cout<< arr[i] <<std::endl;
+        if(arr[i] < min){
+            min = arr[i];
+            minidx = i;
+        }
+    }
+    return minidx;
 }
 
 int main(int argc, char** argv){
@@ -63,7 +99,7 @@ int main(int argc, char** argv){
     MyP3AT myrobot;
     myrobot = MyP3AT();
     //myrobot.points = myrobot.nh.subscribe("pathwaypoints", 1000, &pathWaypointsMessageReceived);
-    myrobot.cmdvel = myrobot.nh.advertise<geometry_msgs::Twist>("RosAria/cmd_vel", 1);
+    myrobot.cmdvel = myrobot.nh.advertise<geometry_msgs::Twist>("RosAria/cmd_vel", 10);
     boost::shared_ptr<rosaria::PathName const> sharedPtr;
 /*
     sharedPtr = ros::topic::waitForMessage<rosaria::PathName>("pathwaypoints", myrobot.nh);
@@ -88,6 +124,13 @@ int main(int argc, char** argv){
     ROS_INFO("%s", "Start scanning near APs...");
     //myrobot.scanWifi();
     ROS_INFO("%s", "Done scanning near APs...");
+
+    for(int i=0; i<RANGE; i++){
+        myrobot.window.push_back(std::deque<double>()); //add a deque
+        for(int j=0; j<WINDOWSIZE-1; j++) myrobot.window[i].push_back(0);
+        myrobot.movingaverage.push_back(100);
+    }
+
     myrobot.Loop();
     
     close(myrobot.mc);
@@ -96,7 +139,7 @@ int main(int argc, char** argv){
 }
 
 void MyP3AT::Loop(){
-    std::string cur_waypoint = "Boiler";
+    std::string cur_waypoint = "";
     geometry_msgs::Twist msg;
     msg.angular.z = 0;
     msg.linear.x = 0;
@@ -111,9 +154,11 @@ void MyP3AT::Loop(){
     system("sleep 5.0");
     //Follow the cur waypoint until the robot arrives
     while(1){
+        write(mc, "$A1M2ID1-085", 13);
+        system("sleep 5.0");
         total_sig.clear();
         maxidx = 0;
-        for(int i=0; i<180; i++){
+        for(int i=0; i<RANGE; i++){
             std::string motorcommand = "$A1M2ID1";
             int angle = i - 85;
             if(angle < 0){
@@ -141,21 +186,24 @@ void MyP3AT::Loop(){
                 std::getline(tempfile, line, '\n');
                 std::stringstream convertor(line);
                 convertor >> cur_sig;
-                //std::cout << "["<< i <<"]"<< " " << line << " " << cur_sig <<std::endl;
+                std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
             }
-            total_sig.push_back(cur_sig);
-            if(cur_sig < total_sig[maxidx]) maxidx = i;
+            //total_sig.push_back(cur_sig);
+            //ROS_INFO("%s", "before pushing back window[i]");
+            window[i].push_back(cur_sig);
+            //ROS_INFO("%s", "after pushing back window[i]");
+            movingaverage[i] = movingwindowaverage(window[i]);
+            //ROS_INFO("%s", "after finding moving average of window[i]");
         }
+        maxidx = findstrongestsignal(movingaverage);
+        std::cout << "Current strongest signal is at: " << maxidx << " " << movingaverage[maxidx]<< std::endl;
         msg.linear.x = 1;
-        msg.angular.z = (maxidx-85)/100;
+        msg.angular.z = -(maxidx-85)*PI/180; // angular.z > 0 : anti-clockwise in radians
         cmdvel.publish(msg);
     }
 
-    //msg.angular.z = 0;
-    //msg.linear.x = 0;
-    //cmdvel.publish(msg);
 }
-
+/*
 void MyP3AT::scanWifi(){
     char a; //system call handler
     
@@ -208,7 +256,7 @@ void MyP3AT::scanWifi(){
 
     return;
 }
-
+*/
 void MyP3AT::serialSetup(std::string port){
     struct termios newtio;
     std::string cmd = "stty -F " + port + " 57600";
