@@ -15,7 +15,7 @@ find_package(catkin REQUIRED COMPONENTS message_generation roscpp nav_msgs geome
 #set(ROS_BUILD_TYPE RelWithDebInfo)
 
 #set the default path for built executables to the "bin" directory
-#set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
+set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 #set the default path for built libraries to the "lib" directory
 #set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
@@ -26,10 +26,10 @@ add_message_files(
   PathName.msg
 )
 #uncomment if you have defined services
-#add_service_files(
-#  FILES
-#  # TODO: List your msg files here
-#)
+add_service_files(
+  FILES
+  GetWayPoints.srv
+)
 
 generate_dynamic_reconfigure_options(cfg/RosAria.cfg)
 
@@ -57,10 +57,28 @@ else()
 endif()
 
 add_executable(RosAria RosAria.cpp LaserPublisher.cpp)
+add_executable(interface Interface.cpp)
+add_executable(print_state print_state.cpp)
+add_executable(teleop teleop.cpp)
+add_executable(testpub testpub.cpp)
 add_dependencies(RosAria rosaria_gencfg)
 add_dependencies(RosAria rosaria_gencpp)
 
 target_link_libraries(RosAria ${catkin_LIBRARIES} ${Boost_LIBRARIES} Aria pthread dl rt)
+target_link_libraries(interface 
+   ${catkin_LIBRARIES}
+)
+target_link_libraries(teleop 
+   ${catkin_LIBRARIES}
+)
+target_link_libraries(print_state 
+   ${catkin_LIBRARIES}
+)
+
+target_link_libraries(testpub
+   ${catkin_LIBRARIES}
+)
+
 set_target_properties(RosAria PROPERTIES COMPILE_FLAGS "-fPIC")
 #set_target_properties(RosAria PROPERTIES LINK_FLAGS "-Wl")
 
