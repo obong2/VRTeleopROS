@@ -39,6 +39,12 @@ generate_dynamic_reconfigure_options(cfg/RosAria.cfg)
 
 find_package(Boost REQUIRED COMPONENTS thread)
 include_directories(${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} )
+include_directories(include)
+install(DIRECTORY include/${PROJECT_NAME}/
+   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+  FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+  PATTERN ".svn" EXCLUDE
+ )
 
 find_package(Aria QUIET)
 if(Aria_FOUND)
