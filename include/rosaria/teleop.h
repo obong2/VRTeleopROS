@@ -13,7 +13,6 @@
 #include <sstream>
 #include <algorithm>
 #include <deque>
-#include <queue>
 #include <math.h>
 #include <rosaria/PathName.h>
 #include <rosaria/GetWayPoints.h>
@@ -23,10 +22,13 @@ struct vertex {
     typedef pair<int, vertex*> ve;
     vector<ve> adj; //cost of edge, destination vertex
     string name;
+    string password;
+    int id;
     int x;
     int y;
-    vertex(string s, int posx, int posy) {
+    vertex(string s, string p, int posx, int posy) {
         name = s;
+        password = p;
         x = posx;
         y = posy;
     }
@@ -36,17 +38,17 @@ class Graph{
 public:
     typedef map<string, vertex *> vmap;
     vmap work;
-    void addvertex(const string&, const int&, const int&);
+    void addvertex(const string&, const string&, const int&, const int&);
     void addedge(const string& from, const string& to, double cost);
 };
 
-void Graph::addvertex(const string &name, const int &posx, const int &posy)
+void Graph::addvertex(const string &name, const string &password, const int &posx, const int &posy)
 {
     vmap::iterator itr = work.find(name);
     if (itr == work.end())
     {
         vertex *v;
-        v = new vertex(name, posx, posy);
+        v = new vertex(name, password, posx, posy);
         work[name] = v;
         return;
     }
@@ -57,7 +59,7 @@ void Graph::addedge(const string& from, const string& to, double cost)
 {
     vertex *f = (work.find(from)->second);
     vertex *t = (work.find(to)->second);
-    pair<int, vertex *> edge = make_pair(cost, t);
+    pair<double, vertex *> edge = make_pair(cost, t);
     f->adj.push_back(edge);
 }
 
@@ -75,7 +77,7 @@ public:
     ros::Publisher cmdvel;                      // publisher to move a robot
     
 private:
-    //void scanWifi();                            // Scan near wifi
+    double scanWifi(string);                            // Scan near wifi
     void serialSetup(string port);         // Serial Port setup
     void setupAPGraph(); 
     vector<string> pathfinding(string, string);

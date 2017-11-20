@@ -70,12 +70,18 @@ void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
 //TODO: Which Algorithm?
 std::vector<std::string> MyP3AT::pathfinding(std::string from, std::string to){
     //Find suboptimal paths and concatenate all together... (recursive???? hmm..m.m.m.m.m.m..)
+    double dist[initialAPs.work.size()][initialAPs.work.size()];
+    
     Graph::vmap::iterator it_from = initialAPs.work.find(from);
     Graph::vmap::iterator it_to = initialAPs.work.find(to);
-    priority_queue<vertex, double> pq;
+    
     std::vector<std::string> result;
     if(it_from != initialAPs.work.end() && it_to != initialAPs.work.end()){
-        
+        for(int i=0; i<initialAPs.work.size(); i++){
+            for(int j=0; j<initialAPs.work.size(); j++){
+                dist[i][j] = 
+            }
+        }
     }
     return result;
 }
@@ -107,6 +113,7 @@ void MyP3AT::Init(char * argv){
         for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);
         DOA.push_back(100);
     }
+
 }
 
 void MyP3AT::Terminate(){
@@ -116,7 +123,7 @@ void MyP3AT::Terminate(){
 
 void MyP3AT::Loop(){
     
-    std::string cur_waypoint = "";
+    std::string cur_waypoint = "SMARTAP1";
     geometry_msgs::Twist msg;
     msg.angular.z = 0;
     msg.linear.x = 0;
@@ -155,16 +162,21 @@ void MyP3AT::Loop(){
             //std::cout<<motorcommand<<std::endl;
             write(mc, motorcommand.c_str(), motorcommand.length());
             system("sleep 0.01");
-
-            system("iwconfig wlx00c0ca577641 | grep Signal| cut -d - -f2 | cut -d ' ' -f 1 > sig_temp.txt");
+            cur_sig = scanWifi(cur_waypoint);
+            if(cur_sig == 999){
+                ROS_ERROR("%s", "AP is not detected...");
+                break;
+            }
+            //system("iwconfig wlx00c0ca577641 | grep Signal| cut -d - -f2 | cut -d ' ' -f 1 > sig_temp.txt");
+            /*
             std::ifstream tempfile("/home/yeonju/catkin_ws/sig_temp.txt");
             while(!tempfile.eof()){
                 std::getline(tempfile, line, '\n');
                 std::stringstream convertor(line);
                 convertor >> cur_sig;
                 //std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
-            }
-            
+            }/
+            */
             window[i].push_back(cur_sig);
 
             // Find DOA in 180 degree range
@@ -183,8 +195,8 @@ void MyP3AT::Loop(){
     }
 
 }
-/*
-void MyP3AT::scanWifi(){
+
+double MyP3AT::scanWifi(std::string cur_waypoint){
     char a; //system call handler
     
     std::string line, line2;
@@ -193,8 +205,8 @@ void MyP3AT::scanWifi(){
     std::size_t found, end;
     
     //TODO: Replace your password and wireless adapter name with yours...
-    a = system("echo iuer9895 | sudo -S iwlist wlx00c0ca577641 scanning | (grep ESSID) > ssid.txt");
-    a = system("echo iuer9895 | sudo -S iwlist wlx00c0ca577641 scanning | (grep 'Signal') > signal.txt");
+    a = system("echo iuer9895 | sudo ifconfig wlx00c0ca577641 up | sudo -S iwlist wlx00c0ca577641 scanning | grep ESSID | cut \\\" -f2 > ssid.txt");
+    a = system("echo iuer9895 | sudo ifconfig wlx00c0ca577641 up | sudo -S iwlist wlx00c0ca577641 scanning | grep Signal | cut -d - -f2 | cut -d ' ' -f 1 > signal.txt");
     
     //TODO: Change the location of files to your own paths.
     std::ifstream fp("/home/yeonju/catkin_ws/ssid.txt");
@@ -202,41 +214,27 @@ void MyP3AT::scanWifi(){
     
     if(fp == NULL){
         std::cout << "[FP]File open error" <<std::endl;
-        return;
+        return 999;
     }
     if(fd == NULL){
         std::cout << "[FD]File open error" <<std::endl;
-        return;
+        return 999;
     }
 
     while(std::getline(fp,line) && std::getline(fd, line2)){
-        //std::cout<<line<<std::endl;
-        
-        found = line2.find("Signal level=");
-        
-        if(found!=std::string::npos){
-            std::stringstream convertor(line2.substr(found+13,3));
-            convertor >> siglevel;
-        }
-        
-        found = line.find("ESSID:\"");
-        //std::remove(line.begin(), line.end(), ' ');
-        end = line.find("\"");
-    //std::cout<<found << " " <<end << std::endl;
-        if(found!=std::string::npos && end!=std::string::npos){
-            std::stringstream convertor2(line.substr(found+7, end-found));
-            convertor2 >> ESSID;
-        }
-        //std::cout<<ESSID <<"   "<<siglevel<<std::endl;
-        if(nearNetworks.find(ESSID) == nearNetworks.end()){ //register new AP
-            std::cout << "New near network registered: " << ESSID <<std::endl;
-             nearNetworks.insert(std::pair<std::string, double>(ESSID, siglevel));
+        std::stringstream convertor(line);
+        convertor >> ESSID;
+
+        if(ESSID == cur_waypoint){
+            std::stringstream convertor2(line2);
+            convertor2 >> siglevel;
+            return siglevel;
         }
     }
 
-    return;
+    return 999;
 }
-*/
+
 void MyP3AT::serialSetup(std::string port){
     struct termios newtio;
     std::string cmd = "stty -F " + port + " 57600";
@@ -263,14 +261,15 @@ void MyP3AT::serialSetup(std::string port){
 void MyP3AT::setupAPGraph(){
     std::string line;
     std::string name;
+    std::string password;
     int posx, posy;
 
     std::ifstream aplistfile("/home/yeonju/catkin_ws/src/ARTeleOpROS/aplist.txt");
     while(!aplistfile.eof()){
         std::getline(aplistfile, line, '\n');
         std::stringstream convertor(line);
-        convertor >> name >> posx >> posy;
-        initialAPs.addvertex(name, posx, posy);
+        convertor >> name >> posx >> posy >> password;
+        initialAPs.addvertex(name, password, posx, posy);
     }
 
     std::string from;
