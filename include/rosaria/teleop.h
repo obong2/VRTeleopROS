@@ -1,67 +1,8 @@
-#include <ros/ros.h>
-#include <geometry_msgs/Twist.h>
-#include <sensor_msgs/PointCloud.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <termios.h>
-#include <stdio.h>
-#include <string>
-#include <unistd.h>
-#include <stdlib.h>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <algorithm>
-#include <deque>
-#include <math.h>
 #include <rosaria/PathName.h>
 #include <rosaria/GetWayPoints.h>
+#include <rosaria/graph.h>
 
 using namespace std;
-struct vertex {
-    typedef pair<int, vertex*> ve;
-    vector<ve> adj; //cost of edge, destination vertex
-    string name;
-    string password;
-    int id;
-    int x;
-    int y;
-    vertex(string s, string p, int posx, int posy) {
-        name = s;
-        password = p;
-        x = posx;
-        y = posy;
-    }
-};
-
-class Graph{
-public:
-    typedef map<string, vertex *> vmap;
-    vmap work;
-    void addvertex(const string&, const string&, const int&, const int&);
-    void addedge(const string& from, const string& to, double cost);
-};
-
-void Graph::addvertex(const string &name, const string &password, const int &posx, const int &posy)
-{
-    vmap::iterator itr = work.find(name);
-    if (itr == work.end())
-    {
-        vertex *v;
-        v = new vertex(name, password, posx, posy);
-        work[name] = v;
-        return;
-    }
-    cout << "\nVertex already exists!";
-}
-
-void Graph::addedge(const string& from, const string& to, double cost)
-{
-    vertex *f = (work.find(from)->second);
-    vertex *t = (work.find(to)->second);
-    pair<double, vertex *> edge = make_pair(cost, t);
-    f->adj.push_back(edge);
-}
 
 class MyP3AT {
 public:
@@ -80,12 +21,12 @@ private:
     double scanWifi(string);                            // Scan near wifi
     void serialSetup(string port);         // Serial Port setup
     void setupAPGraph(); 
-    vector<string> pathfinding(string, string);
+    void pathfinding(string, string);
 
     rosaria::PathName waypoints;                // custom message 
     
     map<string, int> requestedAPs;
-    map<string, double> nearNetworks; // store near wifi with SSID + Signal level
+    queue<vertex> path;
     
     int mc;                                     // variable for a serial communication with a motor controller
     

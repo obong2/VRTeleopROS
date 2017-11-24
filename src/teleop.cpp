@@ -6,8 +6,11 @@
 #define kP         1                       //P gain
 #define kD         0.3                     //D gain
 #define ALPHA      0.7                     //smoothing parameter
-#define SIGTHD     10                      // Threshold
+#define SIGTHD     7                      // Threshold
 #define SONARTHD   4                       // Sonar safe zone threshold (m)
+#define INF 99999                          // Initial edge cost
+//static const std::string WADAPTER = "wlx00c0ca577641";
+static const std::string WADAPTER = "wlan0";
 
 double movingwindowaverage(std::deque<double> &data){
     double sum = 0;
@@ -49,6 +52,28 @@ int findstrongestsignal(std::vector<double> arr){
     return minidx;
 }
 
+void connectap(std::string id, std::string password){
+    int a;
+
+    std::string cmd_passphrase = "sudo wpa_passphrase " + id + " \"" + password + "\" " + "> /home/yeonju/catkin_ws/wireless.conf";
+    std::string cmd_supplicant = "sudo wpa_supplicant -B -c /home/yeonju/catkin_ws/wireless.conf -i " + WADAPTER;
+    
+    
+    
+    //std::string cmd_supplicant = "sudo wpa_supplicant -B -Dwext -i "+ WADAPTER +" -c /home/yeonju/catkin_ws/wireless.conf";
+    
+    a = system(cmd_passphrase.c_str());
+    if(a == -1){
+        ROS_ERROR("%s", "Fail to create passphrase!");
+        return;
+    }
+    
+    a = system(cmd_supplicant.c_str());
+    
+    system("sleep 10.0");
+    ROS_INFO("%s", "Connected to AP...");
+}
+
 //TODO
 void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::string, double> requestedAPs){
     
@@ -56,8 +81,6 @@ void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map
           std::cout<< msg.points[i] <<std::endl;
           requestedAPs.insert(std::pair<std::string, int>(msg.points[i], i));
       }
-
-      
 
 }
 
@@ -67,23 +90,10 @@ void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
         std::cout<<msg.points[i].x<< "  " << msg.points[i].y << "  " << msg.points[i].z <<std::endl;
     }
 }
-//TODO: Which Algorithm?
-std::vector<std::string> MyP3AT::pathfinding(std::string from, std::string to){
-    //Find suboptimal paths and concatenate all together... (recursive???? hmm..m.m.m.m.m.m..)
-    double dist[initialAPs.work.size()][initialAPs.work.size()];
-    
-    Graph::vmap::iterator it_from = initialAPs.work.find(from);
-    Graph::vmap::iterator it_to = initialAPs.work.find(to);
-    
-    std::vector<std::string> result;
-    if(it_from != initialAPs.work.end() && it_to != initialAPs.work.end()){
-        for(int i=0; i<initialAPs.work.size(); i++){
-            for(int j=0; j<initialAPs.work.size(); j++){
-                dist[i][j] = 
-            }
-        }
-    }
-    return result;
+
+void MyP3AT::pathfinding(std::string from, std::string to){
+    initialAPs.pathfindingFloyd();
+    path = initialAPs.returnPath(from, to);
 }
 
 void MyP3AT::Init(char * argv){
@@ -94,7 +104,9 @@ void MyP3AT::Init(char * argv){
     boost::shared_ptr<rosaria::PathName const> sharedPtr;
 
     initialAPs = Graph();
+    
     setupAPGraph();
+    
     /*
     sharedPtr = ros::topic::waitForMessage<rosaria::PathName>("pathwaypoints", nh);
     
@@ -108,10 +120,12 @@ void MyP3AT::Init(char * argv){
     }
     */
 
+    pathfinding("SMARTAP1", "Boilermaker");
+    
     for(int i=0; i<RANGE; i++){
         window.push_back(std::deque<double>()); //add a deque
         for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);
-        DOA.push_back(100);
+        //DOA.push_back(100);
     }
 
 }
@@ -122,12 +136,8 @@ void MyP3AT::Terminate(){
 }
 
 void MyP3AT::Loop(){
-    
-    std::string cur_waypoint = "SMARTAP1";
     geometry_msgs::Twist msg;
-    msg.angular.z = 0;
-    msg.linear.x = 0;
-    //std::map<std::string, double>::iterator it = nearNetworks.find(cur_waypoint);
+    std::string cmd = "iwconfig " + WADAPTER + " | grep Signal| cut -d - -f2 | cut -d ' ' -f 1 > sig_temp.txt";
     std::string line;
     
     signed int cur_sig;
@@ -135,104 +145,85 @@ void MyP3AT::Loop(){
 
     write(mc, "$A1M2ID1-085", 13);
     system("sleep 2.0");
-    //Follow the cur waypoint until the robot arrives
-    while(1){ //TODO: Change the threshold...
-        write(mc, "$A1M2ID1-085", 13);
-        system("sleep 5.0");
-        
+
+    while(!path.empty()){
+        vertex cur_waypoint = path.front();
+        connectap(cur_waypoint.name, cur_waypoint.password);
         maxidx = 0;
+        msg.angular.z = 0;
+        msg.linear.x = 0;
+        DOA.clear();
         for(int i=0; i<RANGE; i++){
-            std::string motorcommand = "$A1M2ID1";
-            int angle = i - 85;
-            if(angle < 0){
-                if(angle > -10) motorcommand += "-00" + patch::to_string(abs(angle));
-                else if(angle > -100) motorcommand += "-0" + patch::to_string(abs(angle));
-                else motorcommand+="-" + patch::to_string(abs(angle));
-            }
-            else{
-                if(angle<10) motorcommand += "+00" + patch::to_string(angle);
-                else if(angle<100){
-                    motorcommand += "+0" + patch::to_string(angle);
+            DOA.push_back(100);
+            window[i].clear();
+            for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);
+        }
+        //Follow the cur waypoint until the robot arrives
+        while(DOA[maxidx] > SIGTHD){
+            write(mc, "$A1M2ID1-085", 13);
+            system("sleep 5.0");
+            
+            maxidx = 0;
+            for(int i=0; i<RANGE; i++){
+                std::string motorcommand = "$A1M2ID1";
+                int angle = i - 85;
+                if(angle < 0){
+                    if(angle > -10) motorcommand += "-00" + patch::to_string(abs(angle));
+                    else if(angle > -100) motorcommand += "-0" + patch::to_string(abs(angle));
+                    else motorcommand+="-" + patch::to_string(abs(angle));
                 }
                 else{
-                    motorcommand += "+" + patch::to_string(angle);
+                    if(angle<10) motorcommand += "+00" + patch::to_string(angle);
+                    else if(angle<100){
+                        motorcommand += "+0" + patch::to_string(angle);
+                    }
+                    else{
+                        motorcommand += "+" + patch::to_string(angle);
+                    }
                 }
+                
+                write(mc, motorcommand.c_str(), motorcommand.length());
+                system("sleep 0.01");
+
+                system(cmd.c_str());
+                
+                std::ifstream tempfile("/home/yeonju/catkin_ws/sig_temp.txt");
+                while(!tempfile.eof()){
+                    std::getline(tempfile, line, '\n');
+                    std::stringstream convertor(line);
+                    convertor >> cur_sig;
+                    //std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
+                }
+                
+                window[i].push_back(cur_sig);
+
+                // Find DOA in 180 degree range
+                double avg_temp, var_temp;
+                avg_temp = movingwindowaverage(window[i]);
+                var_temp = movingwindowvariance(window[i],avg_temp);
+                DOA[i] = ALPHA*var_temp + (1-ALPHA)*avg_temp;
             }
+
+            ros::spinOnce(); //receive sonar sensor msg
+            maxidx = findstrongestsignal(DOA);
+            std::cout << "Current strongest signal is at: " << maxidx << " " << DOA[maxidx]<< std::endl;
             
-            //std::cout<<motorcommand<<std::endl;
-            write(mc, motorcommand.c_str(), motorcommand.length());
-            system("sleep 0.01");
-            cur_sig = scanWifi(cur_waypoint);
-            if(cur_sig == 999){
-                ROS_ERROR("%s", "AP is not detected...");
-                break;
-            }
-            //system("iwconfig wlx00c0ca577641 | grep Signal| cut -d - -f2 | cut -d ' ' -f 1 > sig_temp.txt");
-            /*
-            std::ifstream tempfile("/home/yeonju/catkin_ws/sig_temp.txt");
-            while(!tempfile.eof()){
-                std::getline(tempfile, line, '\n');
-                std::stringstream convertor(line);
-                convertor >> cur_sig;
-                //std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
-            }/
-            */
-            window[i].push_back(cur_sig);
-
-            // Find DOA in 180 degree range
-            double avg_temp, var_temp;
-            avg_temp = movingwindowaverage(window[i]);
-            var_temp = movingwindowvariance(window[i],avg_temp);
-            DOA[i] = ALPHA*var_temp + (1-ALPHA)*avg_temp;
+            //TODO: PID Control
+            msg.linear.x = 2; // fixed linear velocity
+            msg.angular.z = -(maxidx-85)*PI/180; // angular.z > 0 : anti-clockwise in radians
+            cmdvel.publish(msg);
         }
-        ros::spinOnce();
-        maxidx = findstrongestsignal(DOA);
-        std::cout << "Current strongest signal is at: " << maxidx << " " << DOA[maxidx]<< std::endl;
-        //TODO: PID Control
-        msg.linear.x = 1; // fixed linear velocity
-        msg.angular.z = -(maxidx-85)*PI/180; // angular.z > 0 : anti-clockwise in radians
-        //cmdvel.publish(msg);
+
+        path.pop();
+        std::string tempcmd = "sudo ifconfig " + WADAPTER + " down";
+        system(tempcmd.c_str());
+        tempcmd = "sudo pkill -9 wpa_supplicant";
+        system(tempcmd.c_str());
+        tempcmd = "sudo ifconfig " + WADAPTER + " up";
+        system(tempcmd.c_str());
+        //system("sudo ifup wlp2s0");
+        //system("sudo wpa_supplicant -B -iwlp2s0 -c /etc/wpa_supplicant/wpa_supplicant.conf");
     }
-
-}
-
-double MyP3AT::scanWifi(std::string cur_waypoint){
-    char a; //system call handler
-    
-    std::string line, line2;
-    std::string ESSID;
-    double siglevel;
-    std::size_t found, end;
-    
-    //TODO: Replace your password and wireless adapter name with yours...
-    a = system("echo iuer9895 | sudo ifconfig wlx00c0ca577641 up | sudo -S iwlist wlx00c0ca577641 scanning | grep ESSID | cut \\\" -f2 > ssid.txt");
-    a = system("echo iuer9895 | sudo ifconfig wlx00c0ca577641 up | sudo -S iwlist wlx00c0ca577641 scanning | grep Signal | cut -d - -f2 | cut -d ' ' -f 1 > signal.txt");
-    
-    //TODO: Change the location of files to your own paths.
-    std::ifstream fp("/home/yeonju/catkin_ws/ssid.txt");
-    std::ifstream fd("/home/yeonju/catkin_ws/signal.txt");
-    
-    if(fp == NULL){
-        std::cout << "[FP]File open error" <<std::endl;
-        return 999;
-    }
-    if(fd == NULL){
-        std::cout << "[FD]File open error" <<std::endl;
-        return 999;
-    }
-
-    while(std::getline(fp,line) && std::getline(fd, line2)){
-        std::stringstream convertor(line);
-        convertor >> ESSID;
-
-        if(ESSID == cur_waypoint){
-            std::stringstream convertor2(line2);
-            convertor2 >> siglevel;
-            return siglevel;
-        }
-    }
-
-    return 999;
 }
 
 void MyP3AT::serialSetup(std::string port){
@@ -264,6 +255,7 @@ void MyP3AT::setupAPGraph(){
     std::string password;
     int posx, posy;
 
+    //Read vertex file
     std::ifstream aplistfile("/home/yeonju/catkin_ws/src/ARTeleOpROS/aplist.txt");
     while(!aplistfile.eof()){
         std::getline(aplistfile, line, '\n');
@@ -271,9 +263,24 @@ void MyP3AT::setupAPGraph(){
         convertor >> name >> posx >> posy >> password;
         initialAPs.addvertex(name, password, posx, posy);
     }
-
-    std::string from;
-    std::string to;
+    //Initializing the floyd 2x2 vector
+    for(int i=0; i<initialAPs.count; i++){
+        vector<double> element(initialAPs.count);
+        vector<int> element2(initialAPs.count);
+        initialAPs.floyd.push_back(element);
+        initialAPs.path.push_back(element2);
+    }
+    //std::cout<<"Test2"<<std::endl;
+    for(int i=0; i<initialAPs.count; i++){
+        for(int j=0; j<initialAPs.count; j++){
+            initialAPs.floyd[i][j] = INF;
+            initialAPs.path[i][j] = 0;
+        }
+    }
+    //std::cout<<"Test3"<<std::endl;
+    //Read edge file
+    int from;
+    int to;
     double cost;
     std::ifstream edgefile("/home/yeonju/catkin_ws/src/ARTeleOpROS/edge.txt");
     while(!edgefile.eof()){
@@ -282,6 +289,7 @@ void MyP3AT::setupAPGraph(){
         convertor >> from >> to >> cost;
         initialAPs.addedge(from, to, cost);
     }
+    //std::cout<<"Test4"<<std::endl;
 }
 
 int main(int argc, char** argv){

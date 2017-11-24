@@ -1,5 +1,5 @@
-# http://ros.org/doc/groovy/api/catkin/html/user_guide/supposed.html
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.2.0 FATAL_ERROR)
+
 project(rosaria)
 # Load catkin and all dependencies required for this package
 # TODO: remove all from COMPONENTS that are not catkin packages.
@@ -13,11 +13,12 @@ find_package(catkin REQUIRED COMPONENTS message_generation roscpp nav_msgs geome
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
 #set(ROS_BUILD_TYPE RelWithDebInfo)
-
+#set(CMAKE_CXX_FLAGS "-std=c++14 ${CMAKE_CXX_FLAGS}")
 #set the default path for built executables to the "bin" directory
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 #set the default path for built libraries to the "lib" directory
 #set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
+#add_compile_options(-std=c++11)
 
 #uncomment if you have defined messages
 add_message_files(
@@ -42,9 +43,11 @@ include_directories(${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} )
 include_directories(include)
 install(DIRECTORY include/${PROJECT_NAME}/
    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+  FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.cpp"
   PATTERN ".svn" EXCLUDE
  )
+#set_property(SOURCE ${CATKIN_PACKAGE_INCLUDE_DESTINATION}/PathFinder.h PROPERTY  CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
+#set_property(SOURCE ${CATKIN_PACKAGE_INCLUDE_DESTINATION}/PathFinder.h PROPERTY  CXX_STANDARD_REQUIRED ON)
 
 find_package(Aria QUIET)
 if(Aria_FOUND)
