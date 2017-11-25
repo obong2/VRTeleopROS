@@ -12,10 +12,11 @@ public:
     void Terminate();
     void pathWaypointsMessageReceived(const rosaria::PathName& msg, map<string, double> requestedAPs);
     void sonarMessageReceived(const sensor_msgs::PointCloud &msg);
+    
     ros::NodeHandle nh;                         // Node handler
-    ros::Subscriber points;                     // subscriber to get waypoints from COM2 with PathName type message
-    ros::Subscriber sonar;                      // subscriber to get sonar sensor values
-    ros::Publisher cmdvel;                      // publisher to move a robot
+    ros::Subscriber sub_points;                     // subscriber to get waypoints from COM2 with PathName type message
+    ros::Subscriber sub_sonar;                      // subscriber to get sonar sensor values
+    ros::Publisher pub_cmdvel;                      // publisher to move a robot
     
 private:
     double scanWifi(string);                            // Scan near wifi
@@ -31,6 +32,7 @@ private:
     int mc;                                     // variable for a serial communication with a motor controller
     
     vector<deque<double> > window;     // for moving window average
+    vector<double> sonar;
     vector<double> DOA;          // current average
 
     Graph initialAPs;  

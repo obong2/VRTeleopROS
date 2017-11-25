@@ -6,9 +6,10 @@
 #define kP         1                       //P gain
 #define kD         0.3                     //D gain
 #define ALPHA      0.7                     //smoothing parameter
-#define SIGTHD     7                      // Threshold
-#define SONARTHD   4                       // Sonar safe zone threshold (m)
+#define SIGTHD     7                       // Threshold
+#define SAFEZONE   4                       // Sonar threshold
 #define INF 99999                          // Initial edge cost
+
 //static const std::string WADAPTER = "wlx00c0ca577641";
 static const std::string WADAPTER = "wlan0";
 
@@ -52,6 +53,19 @@ int findstrongestsignal(std::vector<double> arr){
     return minidx;
 }
 
+int sensorfusion(std::vector<double> arr, int cur_max, std::vector<double> sonar_sensor){
+    int i=cur_max;
+    int j=cur_max;
+    while(i>=0 && j<RANGE){
+        if(arr[i] < SAFEZONE) return i;
+        if(arr[j] < SAFEZONE) return j;
+        i--;
+        j++;
+    }
+
+    return -1; //if we cannot find any possible idx
+}
+
 void connectap(std::string id, std::string password){
     int a;
 
@@ -84,10 +98,20 @@ void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map
 
 }
 
-//TODO
 void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
-    for(int i=0; i<msg.points.size(); i++){
-        std::cout<<msg.points[i].x<< "  " << msg.points[i].y << "  " << msg.points[i].z <<std::endl;
+    double data_prev, data_next;
+    for(int i=0; i<7; i++){
+        if(msg.points[i].x == 0 && msg.points[i].y == 0) continue; //ignore useless data
+        else{
+            std::cout<<msg.points[i].x<< "  " << msg.points[i].y << "  " << msg.points[i].z <<std::endl;
+            data_prev = pow(msg.points[i].x, 2) + pow(msg.points[i].y, 2);
+            data_next = pow(msg.points[i+1].x, 2) + pow(msg.points[i+1].y, 2);
+            //linear interpolation...
+            double frag = (data_next - data_prev)/23;
+            for(int j=0; j<23; j++){
+                sonar[i*23 + j] = data_prev + j*frag;
+            }
+        }
     }
 }
 
@@ -99,8 +123,8 @@ void MyP3AT::pathfinding(std::string from, std::string to){
 void MyP3AT::Init(char * argv){
     serialSetup(argv);
     
-    sonar = nh.subscribe("RosAria/sonar", 1, &MyP3AT::sonarMessageReceived, this);
-    cmdvel = nh.advertise<geometry_msgs::Twist>("RosAria/cmd_vel", 10);
+    pub_sonar = nh.subscribe("RosAria/sonar", 1, &MyP3AT::sonarMessageReceived, this);
+    pub_cmdvel = nh.advertise<geometry_msgs::Twist>("RosAria/cmd_vel", 10);
     boost::shared_ptr<rosaria::PathName const> sharedPtr;
 
     initialAPs = Graph();
@@ -153,8 +177,11 @@ void MyP3AT::Loop(){
         msg.angular.z = 0;
         msg.linear.x = 0;
         DOA.clear();
+        sonar.clear();
+
         for(int i=0; i<RANGE; i++){
             DOA.push_back(100);
+            sonar.push_back(0);
             window[i].clear();
             for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);
         }
@@ -206,23 +233,31 @@ void MyP3AT::Loop(){
 
             ros::spinOnce(); //receive sonar sensor msg
             maxidx = findstrongestsignal(DOA);
+            maxidx = sensorfusion(DOA, maidx, sonar);
+
+            if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
+                msg.linear.x = 0;
+                msg.angular.z = 0;
+                pub_cmdvel.publish(msg);
+
+                continue;
+            }
             std::cout << "Current strongest signal is at: " << maxidx << " " << DOA[maxidx]<< std::endl;
             
             //TODO: PID Control
             msg.linear.x = 2; // fixed linear velocity
             msg.angular.z = -(maxidx-85)*PI/180; // angular.z > 0 : anti-clockwise in radians
-            cmdvel.publish(msg);
+            pub_cmdvel.publish(msg);
         }
 
         path.pop();
+
         std::string tempcmd = "sudo ifconfig " + WADAPTER + " down";
         system(tempcmd.c_str());
         tempcmd = "sudo pkill -9 wpa_supplicant";
         system(tempcmd.c_str());
         tempcmd = "sudo ifconfig " + WADAPTER + " up";
         system(tempcmd.c_str());
-        //system("sudo ifup wlp2s0");
-        //system("sudo wpa_supplicant -B -iwlp2s0 -c /etc/wpa_supplicant/wpa_supplicant.conf");
     }
 }
 
