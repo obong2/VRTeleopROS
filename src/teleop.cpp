@@ -252,7 +252,7 @@ void MyP3AT::Loop(){
             ros::spinOnce(); //receive sonar sensor msg
             
             maxidx = findstrongestsignal(DOA);
-            maxidx = sensorfusion(maxidx, sonar);
+            //maxidx = sensorfusion(maxidx, sonar);
                 
             if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
                 msg.linear.x = 0;
