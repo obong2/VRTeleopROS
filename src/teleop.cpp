@@ -9,32 +9,50 @@
 #define SIGTHD     3                       // Threshold
 #define SAFEZONE   2                       // Sonar threshold
 #define INF 99999                          // Initial edge cost
+#define ALPHA2     0.9
 
-//static const std::string WADAPTER = "wlx00c0ca577641";
-static const std::string WADAPTER = "wlan0";
+static const std::string WADAPTER = "wlx00c0ca577641";
+//static const std::string WADAPTER = "wlan0";
 
-double movingwindowaverage(std::deque<double> &data){
+double movingwindowaverage(std::deque<double> &data, double prev_val){
     double sum = 0;
     std::deque<double>::reverse_iterator j;
+    std::vector<double> raw;
     //std::cout<<"--------------------------"<<std::endl;
     for(j = data.rbegin(); j != data.rend(); j++){
         //std::cout<<*j<<std::endl;
-        sum = sum + *j;
+        raw.push_back(*j);
+        //sum = sum + *j;
+    }
+
+    raw[0] = prev_val + ALPHA2 * (raw[0] - prev_val);
+    sum = raw[0];
+    for(int i=1; i<raw.size(); i++){ //size always WINDOWSIZE
+        raw[i] = raw[i-1] + ALPHA2 * (raw[i] - raw[i-1]);
+        sum = sum + raw[i];
     }
     return sum/WINDOWSIZE;
 }
 
-double movingwindowvariance(std::deque<double> &data, double avg){
+double movingwindowvariance(std::deque<double> &data, double avg, double prev_val){
     double sum = 0;
 
     std::deque<double>::reverse_iterator j;
+    std::vector<double> raw;
+
     //std::cout<<"--------------------------"<<std::endl;
     for(j = data.rbegin(); j != data.rend(); j++){
         //std::cout<<*j<<std::endl;
-        sum = sum + pow((*j-avg),2);
+        raw.push_back(*j);
+        //sum = sum + pow((*j-avg),2);
     }
-    data.pop_front();
 
+    raw[0] = prev_val + ALPHA2 * (raw[0] - prev_val);
+    sum = raw[0];
+    for(int i=1; i<raw.size(); i++){ //size always WINDOWSIZE
+        raw[i] = raw[i-1] + ALPHA2 * (raw[i] - raw[i-1]);
+        sum = sum + pow((raw[i]-avg),2);
+    }
     return sum/WINDOWSIZE;
 }
 
@@ -243,8 +261,9 @@ void MyP3AT::Loop(){
 
                 // Find DOA in 180 degree range
                 double avg_temp, var_temp;
-                avg_temp = movingwindowaverage(window[i]);
-                var_temp = movingwindowvariance(window[i],avg_temp);
+                avg_temp = movingwindowaverage(window[i], DOA[i]);
+                var_temp = movingwindowvariance(window[i],avg_temp, DOA[i]);
+                window[i].pop_front();
                 DOA[i] = ALPHA*var_temp + (1-ALPHA)*avg_temp;
                 writefile<<"------------------------------------------";
             }
@@ -252,7 +271,7 @@ void MyP3AT::Loop(){
             ros::spinOnce(); //receive sonar sensor msg
             
             maxidx = findstrongestsignal(DOA);
-            //maxidx = sensorfusion(maxidx, sonar);
+            maxidx = sensorfusion(maxidx, sonar);
                 
             if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
                 msg.linear.x = 0;
