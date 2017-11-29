@@ -16,6 +16,7 @@ public:
     ros::NodeHandle nh;                         // Node handler
     ros::Subscriber sub_points;                     // subscriber to get waypoints from COM2 with PathName type message
     ros::Subscriber sub_sonar;                      // subscriber to get sonar sensor values
+    ros::Subscriber sub_pose;
     ros::Publisher pub_cmdvel;                      // publisher to move a robot
     
 private:

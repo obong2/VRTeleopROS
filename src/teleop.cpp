@@ -5,30 +5,32 @@
 #define PI         3.14159265358979323846  /* pi */
 #define kP         1                       //P gain
 #define kD         0.3                     //D gain
-#define ALPHA      0.7                     //smoothing parameter
+#define ALPHA      0.5                     //smoothing parameter
 #define SIGTHD     3                       // Threshold
 #define SAFEZONE   2                       // Sonar threshold
 #define INF 99999                          // Initial edge cost
-#define ALPHA2     0.9
+#define ALPHA2     0.5
 
-static const std::string WADAPTER = "wlx00c0ca577641";
+static const std::string WADAPTER = "wlx00c0ca577643";
 //static const std::string WADAPTER = "wlan0";
 
 double movingwindowaverage(std::deque<double> &data, double prev_val){
     double sum = 0;
-    std::deque<double>::reverse_iterator j;
+    std::deque<double>::iterator j;
     std::vector<double> raw;
-    //std::cout<<"--------------------------"<<std::endl;
-    for(j = data.rbegin(); j != data.rend(); j++){
-        //std::cout<<*j<<std::endl;
+    std::cout<<"--------------------------"<<std::endl;
+    for(j = data.begin(); j != data.end(); j++){
+        std::cout<<*j<<std::endl;
         raw.push_back(*j);
         //sum = sum + *j;
     }
 
     raw[0] = prev_val + ALPHA2 * (raw[0] - prev_val);
     sum = raw[0];
+    std::cout<<"--------------------------"<<std::endl;
     for(int i=1; i<raw.size(); i++){ //size always WINDOWSIZE
         raw[i] = raw[i-1] + ALPHA2 * (raw[i] - raw[i-1]);
+        std::cout<<raw[i]<<std::endl;
         sum = sum + raw[i];
     }
     return sum/WINDOWSIZE;
@@ -37,11 +39,11 @@ double movingwindowaverage(std::deque<double> &data, double prev_val){
 double movingwindowvariance(std::deque<double> &data, double avg, double prev_val){
     double sum = 0;
 
-    std::deque<double>::reverse_iterator j;
+    std::deque<double>::iterator j;
     std::vector<double> raw;
 
     //std::cout<<"--------------------------"<<std::endl;
-    for(j = data.rbegin(); j != data.rend(); j++){
+    for(j = data.begin(); j != data.end(); j++){
         //std::cout<<*j<<std::endl;
         raw.push_back(*j);
         //sum = sum + pow((*j-avg),2);
@@ -59,9 +61,9 @@ double movingwindowvariance(std::deque<double> &data, double avg, double prev_va
 int findstrongestsignal(std::vector<double> arr){
     int minidx;
     double min;
-    min = arr[0];
-    minidx = 0;
-    for(int i=0; i<RANGE; i++){
+    min = arr[RANGE-1];
+    minidx = RANGE-1;
+    for(int i=RANGE-1; i>=0; i--){
         //std::cout<< arr[i] <<std::endl;
         if(arr[i] < min){
             min = arr[i];
@@ -116,6 +118,9 @@ void connectap(std::string id, std::string password){
     ROS_INFO("%s", "Connected to AP...");
 }
 
+void poseMessageReceived(const nav_msgs::Odometry &msg){
+    std::cout<< "Pose: x = " << msg.pose.pose.position.x << "y = " << msg.pose.pose.position.y <<std::endl;
+}
 //TODO
 void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::string, double> requestedAPs){
     
@@ -154,6 +159,7 @@ void MyP3AT::Init(char * argv){
     serialSetup(argv);
     
     sub_sonar = nh.subscribe("RosAria/sonar", 1, &MyP3AT::sonarMessageReceived, this);
+    sub_pose = nh.subscribe("RosAria/pose", 1, &poseMessageReceived);
     pub_cmdvel = nh.advertise<geometry_msgs::Twist>("RosAria/cmd_vel", 10);
     boost::shared_ptr<rosaria::PathName const> sharedPtr;
 
@@ -174,7 +180,7 @@ void MyP3AT::Init(char * argv){
     }
     */
 
-    pathfinding("SMARTAP2", "SMARTAP1");
+    pathfinding("Boilermaker", "SMARTAP2");
     
     for(int i=0; i<RANGE; i++){
         window.push_back(std::deque<double>()); //add a deque
@@ -200,7 +206,7 @@ void MyP3AT::Loop(){
 
     int maxidx;
 
-    write(mc, "$A1M2ID1-085", 13);
+    write(mc, "$A1M2ID1-090", 13);
     system("sleep 3.0");
 
     while(!path.empty()){
@@ -221,7 +227,7 @@ void MyP3AT::Loop(){
         }
         //Follow the cur waypoint until the robot arrives
         while(cur_doa > SIGTHD){
-            write(mc, "$A1M2ID1-085", 13);
+            write(mc, "$A1M2ID1-090", 13);
             system("sleep 4.0");
             
             maxidx = 0;
@@ -253,8 +259,8 @@ void MyP3AT::Loop(){
                     std::getline(tempfile, line, '\n');
                     std::stringstream convertor(line);
                     convertor >> cur_sig;
-                    writefile << "[" << count<< "]" <<": " << i << " " << cur_sig;
-                    //std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
+                    //writefile << "[" << count<< "]" <<": " << i << " " << cur_sig;
+                    std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
                 }
                 
                 window[i].push_back(cur_sig);
@@ -265,13 +271,13 @@ void MyP3AT::Loop(){
                 var_temp = movingwindowvariance(window[i],avg_temp, DOA[i]);
                 window[i].pop_front();
                 DOA[i] = ALPHA*var_temp + (1-ALPHA)*avg_temp;
-                writefile<<"------------------------------------------";
+                //writefile<<"------------------------------------------";
             }
 
             ros::spinOnce(); //receive sonar sensor msg
             
             maxidx = findstrongestsignal(DOA);
-            maxidx = sensorfusion(maxidx, sonar);
+            //maxidx = sensorfusion(maxidx, sonar);
                 
             if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
                 msg.linear.x = 0;
