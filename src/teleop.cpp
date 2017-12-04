@@ -132,8 +132,9 @@ void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
     std::reverse(sonar.begin(), sonar.end());
 }
 
-void MyP3AT::pathfinding(std::string from, std::string to){
+void MyP3AT::pathfinding(std::string to){
     initialAPs.pathfindingFloyd();
+    string from = initialAPs.closestNode(currentpose.first, currentpose.second);
     path = initialAPs.returnPath(from, to);
 }
 
