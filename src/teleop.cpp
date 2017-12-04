@@ -8,53 +8,35 @@
 #define ALPHA      0.5                     //smoothing parameter
 #define SIGTHD     3                       // Threshold
 #define SAFEZONE   2                       // Sonar threshold
-#define INF 99999                          // Initial edge cost
+#define INF        99999                          // Initial edge cost
 #define ALPHA2     0.5
 
 static const std::string WADAPTER = "wlx00c0ca577643";
 //static const std::string WADAPTER = "wlan0";
 
-double movingwindowaverage(std::deque<double> &data, double prev_val){
+double movingwindowaverage(std::deque<double> &data){
     double sum = 0;
     std::deque<double>::iterator j;
-    std::vector<double> raw;
+    
     std::cout<<"--------------------------"<<std::endl;
     for(j = data.begin(); j != data.end(); j++){
         std::cout<<*j<<std::endl;
-        raw.push_back(*j);
-        //sum = sum + *j;
-    }
-
-    raw[0] = prev_val + ALPHA2 * (raw[0] - prev_val);
-    sum = raw[0];
-    std::cout<<"--------------------------"<<std::endl;
-    for(int i=1; i<raw.size(); i++){ //size always WINDOWSIZE
-        raw[i] = raw[i-1] + ALPHA2 * (raw[i] - raw[i-1]);
-        std::cout<<raw[i]<<std::endl;
-        sum = sum + raw[i];
+        //raw.push_back(*j);
+        sum = sum + *j;
     }
     return sum/WINDOWSIZE;
 }
 
-double movingwindowvariance(std::deque<double> &data, double avg, double prev_val){
+double movingwindowvariance(std::deque<double> &data, double avg){
     double sum = 0;
 
     std::deque<double>::iterator j;
-    std::vector<double> raw;
-
+    
     //std::cout<<"--------------------------"<<std::endl;
     for(j = data.begin(); j != data.end(); j++){
-        //std::cout<<*j<<std::endl;
-        raw.push_back(*j);
-        //sum = sum + pow((*j-avg),2);
+        sum = sum + pow((*j-avg),2);
     }
 
-    raw[0] = prev_val + ALPHA2 * (raw[0] - prev_val);
-    sum = raw[0];
-    for(int i=1; i<raw.size(); i++){ //size always WINDOWSIZE
-        raw[i] = raw[i-1] + ALPHA2 * (raw[i] - raw[i-1]);
-        sum = sum + pow((raw[i]-avg),2);
-    }
     return sum/WINDOWSIZE;
 }
 
@@ -102,8 +84,6 @@ void connectap(std::string id, std::string password){
     std::string cmd_passphrase = "sudo wpa_passphrase " + id + " \"" + password + "\" " + "> /home/yeonju/catkin_ws/wireless.conf";
     std::string cmd_supplicant = "sudo wpa_supplicant -B -c /home/yeonju/catkin_ws/wireless.conf -i " + WADAPTER;
     
-    
-    
     //std::string cmd_supplicant = "sudo wpa_supplicant -B -Dwext -i "+ WADAPTER +" -c /home/yeonju/catkin_ws/wireless.conf";
     
     a = system(cmd_passphrase.c_str());
@@ -120,6 +100,8 @@ void connectap(std::string id, std::string password){
 
 void poseMessageReceived(const nav_msgs::Odometry &msg){
     std::cout<< "Pose: x = " << msg.pose.pose.position.x << "y = " << msg.pose.pose.position.y <<std::endl;
+    currentpose.first = msg.pose.pose.position.x;
+    currentpose.second = msg.pose.pose.position.y;
 }
 //TODO
 void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::string, double> requestedAPs){
@@ -179,8 +161,9 @@ void MyP3AT::Init(char * argv){
         pathWaypointsMessageReceived(waypoints, requestedAPs);
     }
     */
+    currentpose.first = 0; currentpose.second = 0;
 
-    pathfinding("Boilermaker", "SMARTAP2");
+    pathfinding("SMARTAP2", "Boilermaker");
     
     for(int i=0; i<RANGE; i++){
         window.push_back(std::deque<double>()); //add a deque
@@ -231,9 +214,9 @@ void MyP3AT::Loop(){
             system("sleep 4.0");
             
             maxidx = 0;
-            for(int i=0; i<RANGE; i++){
+            for(int i=0; i<RANGE/10; i++){
                 std::string motorcommand = "$A1M2ID1";
-                int angle = i - 85;
+                int angle = i*10 - 85;
                 if(angle < 0){
                     if(angle > -10) motorcommand += "-00" + patch::to_string(abs(angle));
                     else if(angle > -100) motorcommand += "-0" + patch::to_string(abs(angle));
@@ -250,7 +233,7 @@ void MyP3AT::Loop(){
                 }
             
                 write(mc, motorcommand.c_str(), motorcommand.length());
-                system("sleep 0.01");
+                system("sleep 1");
 
                 system(cmd.c_str());
                 
@@ -267,8 +250,8 @@ void MyP3AT::Loop(){
 
                 // Find DOA in 180 degree range
                 double avg_temp, var_temp;
-                avg_temp = movingwindowaverage(window[i], DOA[i]);
-                var_temp = movingwindowvariance(window[i],avg_temp, DOA[i]);
+                avg_temp = movingwindowaverage(window[i]);
+                var_temp = movingwindowvariance(window[i],avg_temp);
                 window[i].pop_front();
                 DOA[i] = ALPHA*var_temp + (1-ALPHA)*avg_temp;
                 //writefile<<"------------------------------------------";
@@ -286,11 +269,11 @@ void MyP3AT::Loop(){
 
                 continue;
             }
-            std::cout << "Current strongest signal is at: " << maxidx << " " << DOA[maxidx]<< std::endl;
+            std::cout << "Current strongest signal is at: " << maxidx*10 << " " << DOA[maxidx]<< std::endl;
 
             //TODO: PID Control
             msg.linear.x = 1; // fixed linear velocity
-            msg.angular.z = -(maxidx-90)*PI/180; // angular.z > 0 : anti-clockwise in radians
+            msg.angular.z = -(maxidx*10-90)*PI/180; // angular.z > 0 : anti-clockwise in radians
             pub_cmdvel.publish(msg);
         }
 

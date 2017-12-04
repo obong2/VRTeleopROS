@@ -1,4 +1,5 @@
 #include <rosaria/PathName.h>
+#include <rosaria/Measurements.h>
 #include <rosaria/GetWayPoints.h>
 #include <rosaria/graph.h>
 
@@ -27,6 +28,8 @@ private:
 
     rosaria::PathName waypoints;                // custom message 
     
+    pair<double, double> currentpose;
+
     map<string, int> requestedAPs;
     queue<vertex> path;
     
