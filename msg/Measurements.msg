@@ -1,3 +1,3 @@
-double[] movingavg
-double[] probfilter
-double[] sonar
+float[] movingavg
+float[] probfilter
+float[] sonar

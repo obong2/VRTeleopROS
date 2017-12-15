@@ -11,7 +11,7 @@
 #define INF        99999                          // Initial edge cost
 #define ALPHA2     0.5
 
-static const std::string WADAPTER = "wlx00c0ca577643";
+static const std::string WADAPTER = "wlx00c0ca590adb";
 //static const std::string WADAPTER = "wlan0";
 
 double movingwindowaverage(std::deque<double> &data){
@@ -98,7 +98,7 @@ void connectap(std::string id, std::string password){
     ROS_INFO("%s", "Connected to AP...");
 }
 
-void poseMessageReceived(const nav_msgs::Odometry &msg){
+void MyP3AT::poseMessageReceived(const nav_msgs::Odometry &msg){
     std::cout<< "Pose: x = " << msg.pose.pose.position.x << "y = " << msg.pose.pose.position.y <<std::endl;
     currentpose.first = msg.pose.pose.position.x;
     currentpose.second = msg.pose.pose.position.y;
@@ -142,7 +142,7 @@ void MyP3AT::Init(char * argv){
     serialSetup(argv);
     
     sub_sonar = nh.subscribe("RosAria/sonar", 1, &MyP3AT::sonarMessageReceived, this);
-    sub_pose = nh.subscribe("RosAria/pose", 1, &poseMessageReceived);
+    sub_pose = nh.subscribe("RosAria/pose", 1, &MyP3AT::poseMessageReceived, this);
     pub_cmdvel = nh.advertise<geometry_msgs::Twist>("RosAria/cmd_vel", 10);
     boost::shared_ptr<rosaria::PathName const> sharedPtr;
 
@@ -164,7 +164,7 @@ void MyP3AT::Init(char * argv){
     */
     currentpose.first = 0; currentpose.second = 0;
 
-    pathfinding("SMARTAP2", "Boilermaker");
+    pathfinding("ubnt");
     
     for(int i=0; i<RANGE; i++){
         window.push_back(std::deque<double>()); //add a deque
@@ -215,9 +215,9 @@ void MyP3AT::Loop(){
             system("sleep 4.0");
             
             maxidx = 0;
-            for(int i=0; i<RANGE/10; i++){
+            for(int i=0; i<RANGE; i++){
                 std::string motorcommand = "$A1M2ID1";
-                int angle = i*10 - 85;
+                int angle = i - 85;
                 if(angle < 0){
                     if(angle > -10) motorcommand += "-00" + patch::to_string(abs(angle));
                     else if(angle > -100) motorcommand += "-0" + patch::to_string(abs(angle));
@@ -234,7 +234,7 @@ void MyP3AT::Loop(){
                 }
             
                 write(mc, motorcommand.c_str(), motorcommand.length());
-                system("sleep 1");
+                system("sleep 0.01");
 
                 system(cmd.c_str());
                 
@@ -270,11 +270,11 @@ void MyP3AT::Loop(){
 
                 continue;
             }
-            std::cout << "Current strongest signal is at: " << maxidx*10 << " " << DOA[maxidx]<< std::endl;
+            std::cout << "Current strongest signal is at: " << maxidx << " " << DOA[maxidx]<< std::endl;
 
             //TODO: PID Control
             msg.linear.x = 1; // fixed linear velocity
-            msg.angular.z = -(maxidx*10-90)*PI/180; // angular.z > 0 : anti-clockwise in radians
+            msg.angular.z = -(maxidx-85)*PI/180; // angular.z > 0 : anti-clockwise in radians
             pub_cmdvel.publish(msg);
         }
 

@@ -1,5 +1,5 @@
 #include <rosaria/PathName.h>
-#include <rosaria/Measurements.h>
+//#include <rosaria/Measurements.h>
 #include <rosaria/GetWayPoints.h>
 #include <rosaria/graph.h>
 
@@ -13,7 +13,8 @@ public:
     void Terminate();
     void pathWaypointsMessageReceived(const rosaria::PathName& msg, map<string, double> requestedAPs);
     void sonarMessageReceived(const sensor_msgs::PointCloud &msg);
-    
+    void poseMessageReceived(const nav_msgs::Odometry &msg);
+
     ros::NodeHandle nh;                         // Node handler
     ros::Subscriber sub_points;                     // subscriber to get waypoints from COM2 with PathName type message
     ros::Subscriber sub_sonar;                      // subscriber to get sonar sensor values
@@ -24,7 +25,7 @@ private:
     double scanWifi(string);                            // Scan near wifi
     void serialSetup(string port);         // Serial Port setup
     void setupAPGraph(); 
-    void pathfinding(string, string);
+    void pathfinding(string);
 
     rosaria::PathName waypoints;                // custom message 
     

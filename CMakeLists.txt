@@ -25,7 +25,7 @@ add_message_files(
   FILES
   BumperState.msg
   PathName.msg
-  Measurements.msg
+  #Measurements.msg
 )
 #uncomment if you have defined services
 add_service_files(

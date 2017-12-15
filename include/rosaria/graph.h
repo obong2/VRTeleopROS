@@ -55,6 +55,7 @@ public:
     void pathfindingFloyd();
     queue<vertex> returnPath(const string&, const string&);
     void findpath(vector<int>&, vector<vector<int> >&, int, int);
+    string closestNode(double, double);
 };
 
 void Graph::addvertex(const string &ssid, const string &password, const int &posx, const int &posy)
@@ -124,20 +125,20 @@ void Graph::findpath(vector<int> &result, vector<vector<int> > &P, int q, int r)
     }
 }
 
-string closestNode(double cur_x, double cur_y){
+string Graph::closestNode(double cur_x, double cur_y){
     map<string, vertex*>::iterator it;
     vertex *f;
     double min_dist = 100;
     double x, y;
 
-    f = work.begin();
+    f = work.begin()->second;
     for(it=work.begin(); it!=work.end(); ++it){
         x = it->second->x;
         y = it->second->y;
         
         if(min_dist > sqrt(pow(cur_x-x,2) + pow(cur_y-y,2))){
             min_dist = sqrt(pow(cur_x-x,2) + pow(cur_y-y,2));
-            f = it;
+            f = it->second;
         }
     }
 
