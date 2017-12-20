@@ -11,8 +11,8 @@
 #define INF        99999                          // Initial edge cost
 #define ALPHA2     0.5
 
-static const std::string WADAPTER = "wlx00c0ca590adb";
-//static const std::string WADAPTER = "wlan0";
+//static const std::string WADAPTER = "wlx00c0ca590adb";
+static const std::string WADAPTER = "wlan0";
 
 double movingwindowaverage(std::deque<double> &data){
     double sum = 0;
@@ -81,18 +81,19 @@ int sensorfusion(int cur_max, std::vector<double> sonar_sensor){
 void connectap(std::string id, std::string password){
     int a;
 
-    std::string cmd_passphrase = "sudo wpa_passphrase " + id + " \"" + password + "\" " + "> /home/yeonju/catkin_ws/wireless.conf";
-    std::string cmd_supplicant = "sudo wpa_supplicant -B -c /home/yeonju/catkin_ws/wireless.conf -i " + WADAPTER;
-    
+    //std::string cmd_passphrase = "sudo wpa_passphrase " + id + " \"" + password + "\" " + "> /home/yeonju/catkin_ws/wireless.conf";
+    //std::string cmd_supplicant = "sudo wpa_supplicant -B -c /home/yeonju/catkin_ws/wireless.conf -i " + WADAPTER;
+    std::string cmd_simple = "sudo iwconfig " + WADAPTER + " essid " + id;
     //std::string cmd_supplicant = "sudo wpa_supplicant -B -Dwext -i "+ WADAPTER +" -c /home/yeonju/catkin_ws/wireless.conf";
     
+    /*
     a = system(cmd_passphrase.c_str());
     if(a == -1){
         ROS_ERROR("%s", "Fail to create passphrase!");
         return;
     }
-    
-    a = system(cmd_supplicant.c_str());
+    */
+    a = system(cmd_simple.c_str());
     
     system("sleep 5.0");
     ROS_INFO("%s", "Connected to AP...");
@@ -164,7 +165,7 @@ void MyP3AT::Init(char * argv){
     */
     currentpose.first = 0; currentpose.second = 0;
 
-    pathfinding("ubnt");
+    pathfinding("SMARTAP3");
     
     for(int i=0; i<RANGE; i++){
         window.push_back(std::deque<double>()); //add a deque
@@ -255,7 +256,6 @@ void MyP3AT::Loop(){
                 var_temp = movingwindowvariance(window[i],avg_temp);
                 window[i].pop_front();
                 DOA[i] = ALPHA*var_temp + (1-ALPHA)*avg_temp;
-                //writefile<<"------------------------------------------";
             }
 
             ros::spinOnce(); //receive sonar sensor msg
@@ -279,13 +279,15 @@ void MyP3AT::Loop(){
         }
 
         path.pop();
-
+/*
         std::string tempcmd = "sudo ifconfig " + WADAPTER + " down";
         system(tempcmd.c_str());
         tempcmd = "sudo pkill -9 wpa_supplicant";
         system(tempcmd.c_str());
         tempcmd = "sudo ifconfig " + WADAPTER + " up";
         system(tempcmd.c_str());
+        */
+        
     }
 }
 

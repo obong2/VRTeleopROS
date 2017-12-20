@@ -94,21 +94,23 @@ queue<vertex> Graph::returnPath(const string& from, const string& to){
     queue<vertex> result;
     vector<int> temp;
     map<string, vertex*>::iterator it = work.begin();
-
+    cout<< "Generated path consists of : ";
     result.push(*f);
-    
+    cout<< f->name << " -> ";
+
     findpath(temp, path, f->id, t->id);
 
     for(int i = 0; i<temp.size(); i++){
         for(it = work.begin(); it!=work.end(); ++it){
             if(temp[i] == it->second->id ){
                 result.push(*(it->second));
-                //cout<< it->first <<endl;
+                cout<< it->first <<endl;
             }
         }
     }
     
     result.push(*t);
+    cout << t->name << "end" <<endl;
 /*
     for(int i=0; i<result.size(); i++){
         cout<<result[i]<<endl;
