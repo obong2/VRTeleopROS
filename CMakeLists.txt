@@ -18,7 +18,7 @@ find_package(catkin REQUIRED COMPONENTS message_generation roscpp nav_msgs geome
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 #set the default path for built libraries to the "lib" directory
 #set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
-#add_compile_options(-std=c++11)
+add_compile_options(-std=c++11)
 
 #uncomment if you have defined messages
 add_message_files(
@@ -88,6 +88,10 @@ target_link_libraries(print_state
 
 target_link_libraries(testpub
    ${catkin_LIBRARIES}
+)
+
+target_link_libraries(rssimeasure
+  ${catkin_LIBRARIES}
 )
 
 set_target_properties(RosAria PROPERTIES COMPILE_FLAGS "-fPIC")

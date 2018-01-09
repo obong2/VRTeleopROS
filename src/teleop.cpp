@@ -13,15 +13,14 @@
 
 //static const std::string WADAPTER = "wlx00c0ca590adb";
 static const std::string WADAPTER = "wlan0";
-static bool isTesting = true;
 
 double movingwindowaverage(std::deque<double> &data){
     double sum = 0;
     std::deque<double>::iterator j;
     
-    //std::cout<<"--------------------------"<<std::endl;
+    std::cout<<"--------------------------"<<std::endl;
     for(j = data.begin(); j != data.end(); j++){
-       // std::cout<<*j<<std::endl;
+        std::cout<<*j<<std::endl;
         //raw.push_back(*j);
         sum = sum + *j;
     }
@@ -106,12 +105,13 @@ void MyP3AT::poseMessageReceived(const nav_msgs::Odometry &msg){
     currentpose.second = msg.pose.pose.position.y;
 }
 //TODO
-void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::pair<std::string, int> destinationAP){
+void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::string, double> requestedAPs){
     
-    std::cout<< msg.points[0] <<std::endl;
-    //destinationAP.first = msg.points[0];
-    //destinationAP.second = 0;
-    destinationAP = std::make_pair(msg.points[0], 0);
+      for(int i=0; i<10; i++){
+          std::cout<< msg.points[i] <<std::endl;
+          requestedAPs.insert(std::pair<std::string, int>(msg.points[i], i));
+      }
+
 }
 
 void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
@@ -151,25 +151,22 @@ void MyP3AT::Init(char * argv){
     
     setupAPGraph();
     
+    /*
+    sharedPtr = ros::topic::waitForMessage<rosaria::PathName>("pathwaypoints", nh);
+    
+    if(sharedPtr == NULL){
+        ROS_ERROR("Failed to get waypoints!");
+        return 1;
+    }
+    else{
+        waypoints = *sharedPtr;
+        pathWaypointsMessageReceived(waypoints, requestedAPs);
+    }
+    */
     currentpose.first = 0; currentpose.second = 0;
 
-    if(isTesting){
-        destinationAP = std::make_pair("SMARTAP3", 0);
-    }else{
-        sharedPtr = ros::topic::waitForMessage<rosaria::PathName>("pathwaypoints", nh);
+    pathfinding("SMARTAP3");
     
-        if(sharedPtr == NULL){
-            ROS_ERROR("Failed to get waypoints!");
-            return 1;
-        }
-        else{
-            waypoints = *sharedPtr;
-            pathWaypointsMessageReceived(waypoints, requestedAPs);
-        }
-    }
-    
-    pathfinding(destinationAP.first);
-
     for(int i=0; i<RANGE; i++){
         window.push_back(std::deque<double>()); //add a deque
         for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);
@@ -216,13 +213,16 @@ void MyP3AT::Loop(){
         }
         //Follow the cur waypoint until the robot arrives
         while(cur_doa > SIGTHD){
-            //write(mc, "$A1M2ID1-090", 13);
             write(mc, "$A1M2ID1+090", 13);
-            //system("sleep 0.5");
-            
+            threadRSSI th;
+            th.run();
+            std::this_thread::sleep_for(chrono::seconds(1));
+            h.condition.store(false);
+            std::this_thread::sleep_for(chrono::seconds(1));
             maxidx = 0;
+            /*
             for(int i=0; i<RANGE; i++){ // This loop collects RSS in the range
-                /*
+                
                 std::string motorcommand = "$A1M2ID1";
                 int angle = i - 85;
                 if(angle < 0){
@@ -242,7 +242,7 @@ void MyP3AT::Loop(){
             
                 write(mc, motorcommand.c_str(), motorcommand.length());
                 //system("sleep 0.01");
-                */
+                
                 system(cmd.c_str());
                 
                 std::ifstream tempfile("/home/yeonju/catkin_ws/sig_temp.txt");
@@ -250,7 +250,7 @@ void MyP3AT::Loop(){
                     std::getline(tempfile, line, '\n');
                     std::stringstream convertor(line);
                     convertor >> cur_sig;
-                    //std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
+                    std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
                 }
                 
                 window[i].push_back(cur_sig);
@@ -261,6 +261,7 @@ void MyP3AT::Loop(){
                 var_temp = movingwindowvariance(window[i],avg_temp);
                 window[i].pop_front();
                 DOA[i] = ALPHA*var_temp + (1-ALPHA)*avg_temp;
+                */
             }
 
             ros::spinOnce(); //receive sonar sensor msg
@@ -294,7 +295,7 @@ void MyP3AT::Loop(){
         system(tempcmd.c_str());
         tempcmd = "sudo iwconfig " + WADAPTER + " up";
         system(tempcmd.c_str());
-        /*
+/*
         std::string tempcmd = "sudo ifconfig " + WADAPTER + " down";
         system(tempcmd.c_str());
         tempcmd = "sudo pkill -9 wpa_supplicant";
