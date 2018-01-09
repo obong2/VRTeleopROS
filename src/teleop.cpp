@@ -13,6 +13,7 @@
 
 //static const std::string WADAPTER = "wlx00c0ca590adb";
 static const std::string WADAPTER = "wlan0";
+static bool isTesting = true;
 
 double movingwindowaverage(std::deque<double> &data){
     double sum = 0;
@@ -105,13 +106,12 @@ void MyP3AT::poseMessageReceived(const nav_msgs::Odometry &msg){
     currentpose.second = msg.pose.pose.position.y;
 }
 //TODO
-void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::string, double> requestedAPs){
+void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::pair<std::string, int> destinationAP){
     
-      for(int i=0; i<10; i++){
-          std::cout<< msg.points[i] <<std::endl;
-          requestedAPs.insert(std::pair<std::string, int>(msg.points[i], i));
-      }
-
+    std::cout<< msg.points[0] <<std::endl;
+    //destinationAP.first = msg.points[0];
+    //destinationAP.second = 0;
+    destinationAP = std::make_pair(msg.points[0], 0);
 }
 
 void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
@@ -151,22 +151,25 @@ void MyP3AT::Init(char * argv){
     
     setupAPGraph();
     
-    /*
-    sharedPtr = ros::topic::waitForMessage<rosaria::PathName>("pathwaypoints", nh);
-    
-    if(sharedPtr == NULL){
-        ROS_ERROR("Failed to get waypoints!");
-        return 1;
-    }
-    else{
-        waypoints = *sharedPtr;
-        pathWaypointsMessageReceived(waypoints, requestedAPs);
-    }
-    */
     currentpose.first = 0; currentpose.second = 0;
 
-    pathfinding("SMARTAP3");
+    if(isTesting){
+        destinationAP = std::make_pair("SMARTAP3", 0);
+    }else{
+        sharedPtr = ros::topic::waitForMessage<rosaria::PathName>("pathwaypoints", nh);
     
+        if(sharedPtr == NULL){
+            ROS_ERROR("Failed to get waypoints!");
+            return 1;
+        }
+        else{
+            waypoints = *sharedPtr;
+            pathWaypointsMessageReceived(waypoints, requestedAPs);
+        }
+    }
+    
+    pathfinding(destinationAP.first);
+
     for(int i=0; i<RANGE; i++){
         window.push_back(std::deque<double>()); //add a deque
         for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);

@@ -31,7 +31,8 @@ private:
     
     pair<double, double> currentpose;
 
-    map<string, int> requestedAPs;
+    pair<string, int> destinationAP;
+    
     queue<vertex> path;
     
     int mc;                                     // variable for a serial communication with a motor controller
