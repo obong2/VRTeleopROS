@@ -18,9 +18,9 @@ double movingwindowaverage(std::deque<double> &data){
     double sum = 0;
     std::deque<double>::iterator j;
     
-    std::cout<<"--------------------------"<<std::endl;
+    //std::cout<<"--------------------------"<<std::endl;
     for(j = data.begin(); j != data.end(); j++){
-        std::cout<<*j<<std::endl;
+       // std::cout<<*j<<std::endl;
         //raw.push_back(*j);
         sum = sum + *j;
     }
@@ -95,7 +95,7 @@ void connectap(std::string id, std::string password){
     */
     a = system(cmd_simple.c_str());
     
-    system("sleep 5.0");
+    system("sleep 3.0");
     ROS_INFO("%s", "Connected to AP...");
 }
 
@@ -185,25 +185,26 @@ void MyP3AT::Loop(){
     std::string cmd = "iwconfig " + WADAPTER + " | grep Signal| cut -d - -f2 | cut -d ' ' -f 1 > sig_temp.txt";
     std::string line;
     
-    std::ofstream writefile("/home/yeonju/catkin_ws/issues.txt");
     signed int cur_sig;
     double cur_doa = 100;
 
     int maxidx;
 
     write(mc, "$A1M2ID1-090", 13);
-    system("sleep 3.0");
+    system("sleep 1.0");
 
     while(!path.empty()){
+        // Establish new connection
         vertex cur_waypoint = path.front();
         connectap(cur_waypoint.name, cur_waypoint.password);
+        // Re-initialize local variables
         maxidx = 0;
         msg.angular.z = 0;
         msg.linear.x = 0;
         DOA.clear();
         sonar.clear();
         cur_doa = 100;
-        int count =0;
+        
         for(int i=0; i<RANGE; i++){
             DOA.push_back(100);
             sonar.push_back(0);
@@ -212,11 +213,13 @@ void MyP3AT::Loop(){
         }
         //Follow the cur waypoint until the robot arrives
         while(cur_doa > SIGTHD){
-            write(mc, "$A1M2ID1-090", 13);
-            system("sleep 4.0");
+            //write(mc, "$A1M2ID1-090", 13);
+            write(mc, "$A1M2ID1+090", 13);
+            //system("sleep 0.5");
             
             maxidx = 0;
-            for(int i=0; i<RANGE; i++){
+            for(int i=0; i<RANGE; i++){ // This loop collects RSS in the range
+                /*
                 std::string motorcommand = "$A1M2ID1";
                 int angle = i - 85;
                 if(angle < 0){
@@ -235,8 +238,8 @@ void MyP3AT::Loop(){
                 }
             
                 write(mc, motorcommand.c_str(), motorcommand.length());
-                system("sleep 0.01");
-
+                //system("sleep 0.01");
+                */
                 system(cmd.c_str());
                 
                 std::ifstream tempfile("/home/yeonju/catkin_ws/sig_temp.txt");
@@ -244,8 +247,7 @@ void MyP3AT::Loop(){
                     std::getline(tempfile, line, '\n');
                     std::stringstream convertor(line);
                     convertor >> cur_sig;
-                    //writefile << "[" << count<< "]" <<": " << i << " " << cur_sig;
-                    std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
+                    //std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
                 }
                 
                 window[i].push_back(cur_sig);
@@ -270,16 +272,26 @@ void MyP3AT::Loop(){
 
                 continue;
             }
+            system("sleep 0.5");
+            write(mc, "$A1M2ID1-090", 13);
+            
             std::cout << "Current strongest signal is at: " << maxidx << " " << DOA[maxidx]<< std::endl;
-
+            
             //TODO: PID Control
             msg.linear.x = 1; // fixed linear velocity
             msg.angular.z = -(maxidx-85)*PI/180; // angular.z > 0 : anti-clockwise in radians
             pub_cmdvel.publish(msg);
+
+            system("sleep 1.0");
         }
 
         path.pop();
-/*
+
+        std::string tempcmd = "sudo iwconfig " + WADAPTER + " down";
+        system(tempcmd.c_str());
+        tempcmd = "sudo iwconfig " + WADAPTER + " up";
+        system(tempcmd.c_str());
+        /*
         std::string tempcmd = "sudo ifconfig " + WADAPTER + " down";
         system(tempcmd.c_str());
         tempcmd = "sudo pkill -9 wpa_supplicant";
@@ -312,6 +324,10 @@ void MyP3AT::serialSetup(std::string port){
     tcsetattr(mc, TCSANOW, &newtio);
 
     ROS_INFO("%s", "Serial Port is opend!");
+
+    //change speed
+    write(mc, "$A1M3ID1-400", 13);
+    
 }
 
 void MyP3AT::setupAPGraph(){
