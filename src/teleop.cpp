@@ -1,4 +1,5 @@
 #include <rosaria/teleop.h>
+#include <rosaria/RSSImeasure.h>
 
 #define WINDOWSIZE 3
 #define RANGE      180
@@ -12,7 +13,7 @@
 #define ALPHA2     0.5
 
 //static const std::string WADAPTER = "wlx00c0ca590adb";
-static const std::string WADAPTER = "wlan0";
+//static const std::string WADAPTER = "wlan0";
 
 double movingwindowaverage(std::deque<double> &data){
     double sum = 0;
@@ -99,6 +100,13 @@ void connectap(std::string id, std::string password){
     ROS_INFO("%s", "Connected to AP...");
 }
 
+void disconnectap(){
+    std::string tempcmd = "sudo iwconfig " + WADAPTER + " down";
+    system(tempcmd.c_str());
+    tempcmd = "sudo iwconfig " + WADAPTER + " up";
+    system(tempcmd.c_str());
+}
+
 void MyP3AT::poseMessageReceived(const nav_msgs::Odometry &msg){
     std::cout<< "Pose: x = " << msg.pose.pose.position.x << "y = " << msg.pose.pose.position.y <<std::endl;
     currentpose.first = msg.pose.pose.position.x;
@@ -166,13 +174,13 @@ void MyP3AT::Init(char * argv){
     currentpose.first = 0; currentpose.second = 0;
 
     pathfinding("SMARTAP3");
-    
+    /*
     for(int i=0; i<RANGE; i++){
         window.push_back(std::deque<double>()); //add a deque
         for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);
         //DOA.push_back(100);
     }
-
+*/
 }
 
 void MyP3AT::Terminate(){
@@ -181,120 +189,60 @@ void MyP3AT::Terminate(){
 }
 
 void MyP3AT::Loop(){
-    geometry_msgs::Twist msg;
-    std::string cmd = "iwconfig " + WADAPTER + " | grep Signal| cut -d - -f2 | cut -d ' ' -f 1 > sig_temp.txt";
-    std::string line;
-    
-    signed int cur_sig;
+    int maxidx;
     double cur_doa = 100;
 
-    int maxidx;
+    geometry_msgs::Twist msg;
+      
+    msg.angular.z = 0;
+    msg.linear.x = 0;
+           
+    //Follow the cur waypoint until the robot arrives
+    while(cur_doa > SIGTHD){
+        write(mc, "$A1M2ID1+090", 13);
+        threadRSSI th;
+        th.run();
+        std::this_thread::sleep_for(chrono::seconds(1));
+        th.condition.store(false);
+        std::this_thread::sleep_for(chrono::seconds(1));
+        /*    
+            
+            window[i].push_back(cur_sig);
 
-    write(mc, "$A1M2ID1-090", 13);
-    system("sleep 1.0");
-
-    while(!path.empty()){
-        // Establish new connection
-        vertex cur_waypoint = path.front();
-        connectap(cur_waypoint.name, cur_waypoint.password);
-        // Re-initialize local variables
-        maxidx = 0;
-        msg.angular.z = 0;
-        msg.linear.x = 0;
-        DOA.clear();
-        sonar.clear();
-        cur_doa = 100;
+            // Find DOA in 180 degree range
+            double avg_temp, var_temp;
+            avg_temp = movingwindowaverage(window[i]);
+            var_temp = movingwindowvariance(window[i],avg_temp);
+            window[i].pop_front();
+            DOA[i] = ALPHA*var_temp + (1-ALPHA)*avg_temp;
+        */
+        ros::spinOnce(); //recei        ve sonar sensor msg
         
-        for(int i=0; i<RANGE; i++){
-            DOA.push_back(100);
-            sonar.push_back(0);
-            window[i].clear();
-            for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);
-        }
-        //Follow the cur waypoint until the robot arrives
-        while(cur_doa > SIGTHD){
-            write(mc, "$A1M2ID1+090", 13);
-            threadRSSI th;
-            th.run();
-            std::this_thread::sleep_for(chrono::seconds(1));
-            h.condition.store(false);
-            std::this_thread::sleep_for(chrono::seconds(1));
-            maxidx = 0;
-            /*
-            for(int i=0; i<RANGE; i++){ // This loop collects RSS in the range
-                
-                std::string motorcommand = "$A1M2ID1";
-                int angle = i - 85;
-                if(angle < 0){
-                    if(angle > -10) motorcommand += "-00" + patch::to_string(abs(angle));
-                    else if(angle > -100) motorcommand += "-0" + patch::to_string(abs(angle));
-                    else motorcommand+="-" + patch::to_string(abs(angle));
-                }
-                else{
-                    if(angle<10) motorcommand += "+00" + patch::to_string(angle);
-                    else if(angle<100){
-                        motorcommand += "+0" + patch::to_string(angle);
-                    }
-                    else{
-                        motorcommand += "+" + patch::to_string(angle);
-                    }
-                }
+        maxidx = findstrongestsignal(DOA);
+        //maxidx = sensorfusion(maxidx, sonar);
             
-                write(mc, motorcommand.c_str(), motorcommand.length());
-                //system("sleep 0.01");
-                
-                system(cmd.c_str());
-                
-                std::ifstream tempfile("/home/yeonju/catkin_ws/sig_temp.txt");
-                while(!tempfile.eof()){
-                    std::getline(tempfile, line, '\n');
-                    std::stringstream convertor(line);
-                    convertor >> cur_sig;
-                    std::cout << "["<< i <<"]"<< " " << cur_sig <<std::endl;
-                }
-                
-                window[i].push_back(cur_sig);
-
-                // Find DOA in 180 degree range
-                double avg_temp, var_temp;
-                avg_temp = movingwindowaverage(window[i]);
-                var_temp = movingwindowvariance(window[i],avg_temp);
-                window[i].pop_front();
-                DOA[i] = ALPHA*var_temp + (1-ALPHA)*avg_temp;
-                */
-            }
-
-            ros::spinOnce(); //receive sonar sensor msg
-            
-            maxidx = findstrongestsignal(DOA);
-            //maxidx = sensorfusion(maxidx, sonar);
-                
-            if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
-                msg.linear.x = 0;
-                msg.angular.z = 0;
-                pub_cmdvel.publish(msg);
-
-                continue;
-            }
-            system("sleep 0.5");
-            write(mc, "$A1M2ID1-090", 13);
-            
-            std::cout << "Current strongest signal is at: " << maxidx << " " << DOA[maxidx]<< std::endl;
-            
-            //TODO: PID Control
-            msg.linear.x = 1; // fixed linear velocity
-            msg.angular.z = -(maxidx-85)*PI/180; // angular.z > 0 : anti-clockwise in radians
+        if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
+            msg.linear.x = 0;
+            msg.angular.z = 0;
             pub_cmdvel.publish(msg);
 
-            system("sleep 1.0");
+            system("sleep 0.5");
+            write(mc, "$A1M2ID1-090", 13);
+            continue;
         }
+        system("sleep 0.5");
+        write(mc, "$A1M2ID1-090", 13);
+        
+        std::cout << "Current strongest signal is at: " << maxidx << " " << DOA[maxidx]<< std::endl;
+        
+        //TODO: PID Control
+        msg.linear.x = 1; // fixed linear velocity
+        msg.angular.z = -(maxidx-85)*PI/180; // angular.z > 0 : anti-clockwise in radians
+        this->pub_cmdvel.publish(msg);
 
-        path.pop();
+        system("sleep 0.5");
+    }
 
-        std::string tempcmd = "sudo iwconfig " + WADAPTER + " down";
-        system(tempcmd.c_str());
-        tempcmd = "sudo iwconfig " + WADAPTER + " up";
-        system(tempcmd.c_str());
 /*
         std::string tempcmd = "sudo ifconfig " + WADAPTER + " down";
         system(tempcmd.c_str());
@@ -303,8 +251,6 @@ void MyP3AT::Loop(){
         tempcmd = "sudo ifconfig " + WADAPTER + " up";
         system(tempcmd.c_str());
         */
-        
-    }
 }
 
 void MyP3AT::serialSetup(std::string port){
@@ -395,7 +341,34 @@ int main(int argc, char** argv){
     ROS_INFO("%s", "Initialization is done!");
     }
 
-    myrobot.Loop();    
+    while(!myrobot.path.empty()){
+        int maxidx;
+
+        write(myrobot.mc, "$A1M2ID1-090", 13); // move antenna to the most left side
+        system("sleep 1.0");
+
+        // Establish new connection
+        vertex cur_waypoint = myrobot.path.front();
+        connectap(cur_waypoint.name, cur_waypoint.password);
+        // Re-initialize local variables
+        maxidx = 0;
+        myrobot.DOA.clear();
+        myrobot.sonar.clear();
+        /*
+        for(int i=0; i<RANGE; i++){
+            myrobot.DOA.push_back(100);
+            myrobot.sonar.push_back(0);
+            myrobot.window[i].clear();
+            for(int j=0; j<WINDOWSIZE-1; j++) myrobot.window[i].push_back(0);
+        }*/
+
+        myrobot.Loop();
+
+        disconnectap();
+        myrobot.path.pop();
+    }
+    
+    ROS_INFO("%s", "Your robot finished the navigation.");
 
     myrobot.Terminate();
     return (0);
