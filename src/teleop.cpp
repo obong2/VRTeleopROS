@@ -1,8 +1,6 @@
-#include <rosaria/teleop.h>
+//#include <rosaria/teleop.h>
 #include <rosaria/RSSImeasure.h>
 
-#define WINDOWSIZE 3
-#define RANGE      180
 #define PI         3.14159265358979323846  /* pi */
 #define kP         1                       //P gain
 #define kD         0.3                     //D gain
@@ -10,43 +8,60 @@
 #define SIGTHD     3                       // Threshold
 #define SAFEZONE   2                       // Sonar threshold
 #define INF        99999                          // Initial edge cost
-#define ALPHA2     0.5
 
-//static const std::string WADAPTER = "wlx00c0ca590adb";
-//static const std::string WADAPTER = "wlan0";
+vector<vector<double> > MyP3AT::window;
 
-double movingwindowaverage(std::deque<double> &data){
-    double sum = 0;
-    std::deque<double>::iterator j;
-    
-    std::cout<<"--------------------------"<<std::endl;
-    for(j = data.begin(); j != data.end(); j++){
-        std::cout<<*j<<std::endl;
-        //raw.push_back(*j);
-        sum = sum + *j;
-    }
-    return sum/WINDOWSIZE;
+void pop_front(){
+    assert(!MyP3AT::window.empty());
+    MyP3AT::window.erase(MyP3AT::window.begin());
 }
 
-double movingwindowvariance(std::deque<double> &data, double avg){
+vector<double> movingwindowaverage(){
     double sum = 0;
-
-    std::deque<double>::iterator j;
-    
-    //std::cout<<"--------------------------"<<std::endl;
-    for(j = data.begin(); j != data.end(); j++){
-        sum = sum + pow((*j-avg),2);
+    int size = MyP3AT::window[0].size();
+    //vector<double>::iterator j;
+    //vector<vector<double> >::iterator i;
+    int i, j;
+    vector<double> result;
+    //cout<<"--------------------------"<< MyP3AT::window[0].size() << "    "<< MyP3AT::window.size() <<endl;
+    for(i=0; i<size; i++){
+        sum = 0;
+        for(j=0; j<MyP3AT::window.size(); j++){
+            sum+= MyP3AT::window[j][i];
+        }
+        result.push_back(sum/size);
     }
-
-    return sum/WINDOWSIZE;
+    
+    return result;
 }
 
-int findstrongestsignal(std::vector<double> arr){
+vector<double> movingwindowvariance(vector<double> avg){
+    double sum = 0;
+    int size = MyP3AT::window[0].size();
+    int k;
+    int i, j;
+    vector<double> result;
+    
+    //cout<<"--------------------------"<< size << endl;
+    
+    for(i=0,k=0; i<size; i++, k++){
+        sum = 0;
+        for(j=0;j<MyP3AT::window.size(); j++){
+            sum+= pow((MyP3AT::window[j][i]-avg[k]),2);
+        }
+        result.push_back(sum/size);
+    }
+    //cout<<"--------------------------"<< endl;
+    return result;
+}
+
+int findstrongestsignal(vector<double> arr){
     int minidx;
     double min;
-    min = arr[RANGE-1];
-    minidx = RANGE-1;
-    for(int i=RANGE-1; i>=0; i--){
+    //vector<double>::iterator j;
+    min = arr[0];
+    minidx = 0;
+    for(int i=1; i < arr.size(); i++){
         //std::cout<< arr[i] <<std::endl;
         if(arr[i] < min){
             min = arr[i];
@@ -56,36 +71,37 @@ int findstrongestsignal(std::vector<double> arr){
     return minidx;
 }
 
-int sensorfusion(int cur_max, std::vector<double> sonar_sensor){
+int sensorfusion(int cur_max, vector<double> sonar_sensor){
     int i=cur_max;
     int j=cur_max;
     int result = -1;
-    while(i>=0 || j<RANGE){
-        //std::cout<<sonar_sensor[i]<<" " << sonar_sensor[j] <<std::endl;
-        if(i>=0 && sonar_sensor[i] <= SAFEZONE) {
+    
+    while(i>=0 || j<MyP3AT::window[0].size()){
+        //cout<<sonar_sensor[i]<<" " << sonar_sensor[j] <<endl;
+        if(i>=0 && sonar_sensor[i] >= SAFEZONE) {
             result = i;
-            std::cout<<"HERE1: " <<result<<std::endl;
+            //cout<<"HERE1: " <<result<<endl;
             break;
         }
-        if(j<RANGE && sonar_sensor[j] <= SAFEZONE) {
+        if(j<MyP3AT::window[0].size() && sonar_sensor[j] >= SAFEZONE) {
             result = j;
-            std::cout<<"HERE2: " <<result<<std::endl;
+            //cout<<"HERE2: " <<result<<endl;
             break;
         }
         i--;
         j++;
     }
-
+    
     return result; //if we cannot find any possible idx
 }
 
-void connectap(std::string id, std::string password){
+void connectap(string id, string password){
     int a;
 
-    //std::string cmd_passphrase = "sudo wpa_passphrase " + id + " \"" + password + "\" " + "> /home/yeonju/catkin_ws/wireless.conf";
-    //std::string cmd_supplicant = "sudo wpa_supplicant -B -c /home/yeonju/catkin_ws/wireless.conf -i " + WADAPTER;
-    std::string cmd_simple = "sudo iwconfig " + WADAPTER + " essid " + id;
-    //std::string cmd_supplicant = "sudo wpa_supplicant -B -Dwext -i "+ WADAPTER +" -c /home/yeonju/catkin_ws/wireless.conf";
+    //string cmd_passphrase = "sudo wpa_passphrase " + id + " \"" + password + "\" " + "> /home/yeonju/catkin_ws/wireless.conf";
+    //string cmd_supplicant = "sudo wpa_supplicant -B -c /home/yeonju/catkin_ws/wireless.conf -i " + WADAPTER;
+    string cmd_simple = "sudo iwconfig " + WADAPTER + " essid " + id;
+    //string cmd_supplicant = "sudo wpa_supplicant -B -Dwext -i "+ WADAPTER +" -c /home/yeonju/catkin_ws/wireless.conf";
     
     /*
     a = system(cmd_passphrase.c_str());
@@ -101,47 +117,56 @@ void connectap(std::string id, std::string password){
 }
 
 void disconnectap(){
-    std::string tempcmd = "sudo iwconfig " + WADAPTER + " down";
+    string tempcmd = "sudo iwconfig " + WADAPTER + " down";
     system(tempcmd.c_str());
     tempcmd = "sudo iwconfig " + WADAPTER + " up";
     system(tempcmd.c_str());
 }
 
 void MyP3AT::poseMessageReceived(const nav_msgs::Odometry &msg){
-    std::cout<< "Pose: x = " << msg.pose.pose.position.x << "y = " << msg.pose.pose.position.y <<std::endl;
+    cout<< "Pose: x = " << msg.pose.pose.position.x << "y = " << msg.pose.pose.position.y <<endl;
     currentpose.first = msg.pose.pose.position.x;
     currentpose.second = msg.pose.pose.position.y;
 }
 //TODO
-void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, std::map<std::string, double> requestedAPs){
+void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, map<string, double> requestedAPs){
     
       for(int i=0; i<10; i++){
-          std::cout<< msg.points[i] <<std::endl;
-          requestedAPs.insert(std::pair<std::string, int>(msg.points[i], i));
+          cout<< msg.points[i] <<endl;
+          requestedAPs.insert(pair<string, int>(msg.points[i], i));
       }
 
 }
 
 void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
     double data_prev, data_next;
+    //sonar.clear();
+    //sonar_new.clear();
+    sonar.reserve(185);
+    //sonar_new.reserve(20);
+
     for(int i=0; i<8; i++){
         if(msg.points[i].x == 0 && msg.points[i].y == 0) continue; //ignore useless data
         else{
-            //std::cout<<msg.points[i].x<< "  " << msg.points[i].y << "  " << msg.points[i].z <<std::endl;
+            
             data_prev = sqrt(pow(msg.points[i].x, 2) + pow(msg.points[i].y, 2));
             data_next = sqrt(pow(msg.points[i+1].x, 2) + pow(msg.points[i+1].y, 2));
+            cout<<sqrt(pow(msg.points[i].x, 2) + pow(msg.points[i].y, 2))<<endl;
             //linear interpolation...
             double frag = (data_next - data_prev)/23;
             for(int j=0; j<23; j++){
                 sonar[i*23 + j] = data_prev + j*frag;
-                //std::cout<<i*23 + j << ": " << sonar[i*23+j]<<std::endl;
+                //cout<<i*23 + j << ": " << sonar[i*23+j]<<endl;
             }
         }
     }
-    std::reverse(sonar.begin(), sonar.end());
+    reverse(sonar.begin(), sonar.end());
+    for(int i=0; i<MyP3AT::window[0].size(); i++){
+        sonar_new.push_back(sonar[i*9]);
+    }
 }
 
-void MyP3AT::pathfinding(std::string to){
+void MyP3AT::pathfinding(string to){
     initialAPs.pathfindingFloyd();
     string from = initialAPs.closestNode(currentpose.first, currentpose.second);
     path = initialAPs.returnPath(from, to);
@@ -174,9 +199,10 @@ void MyP3AT::Init(char * argv){
     currentpose.first = 0; currentpose.second = 0;
 
     pathfinding("SMARTAP3");
+    
     /*
     for(int i=0; i<RANGE; i++){
-        window.push_back(std::deque<double>()); //add a deque
+        window.push_back(deque<double>()); //add a deque
         for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);
         //DOA.push_back(100);
     }
@@ -196,31 +222,35 @@ void MyP3AT::Loop(){
       
     msg.angular.z = 0;
     msg.linear.x = 0;
-           
+        
     //Follow the cur waypoint until the robot arrives
     while(cur_doa > SIGTHD){
+
+        
+
         write(mc, "$A1M2ID1+090", 13);
         threadRSSI th;
         th.run();
-        std::this_thread::sleep_for(chrono::seconds(1));
+        this_thread::sleep_for(chrono::seconds(1));
         th.condition.store(false);
-        std::this_thread::sleep_for(chrono::seconds(1));
-        /*    
+        this_thread::sleep_for(chrono::milliseconds(500));
+        cout<< "window size: " << MyP3AT::window.size() <<endl;
             
-            window[i].push_back(cur_sig);
-
-            // Find DOA in 180 degree range
-            double avg_temp, var_temp;
-            avg_temp = movingwindowaverage(window[i]);
-            var_temp = movingwindowvariance(window[i],avg_temp);
-            window[i].pop_front();
-            DOA[i] = ALPHA*var_temp + (1-ALPHA)*avg_temp;
-        */
-        ros::spinOnce(); //recei        ve sonar sensor msg
+        // Find DOA in 180 degree range
+        vector<double> avg_temp, var_temp;
+        avg_temp = movingwindowaverage();
+        var_temp = movingwindowvariance(avg_temp);
         
+        for(int l=0; l<avg_temp.size(); l++){
+            DOA.push_back(ALPHA*avg_temp[l] + (1-ALPHA)*var_temp[l]);
+            //cout<< avg_temp[l] << "    " << var_temp[l] <<endl;
+        }
+        cout<<"--------------------------3" << endl;
+        ros::spinOnce(); //receive sonar sensor msg
+        cout<<"--------------------------3.5" << endl;
         maxidx = findstrongestsignal(DOA);
-        //maxidx = sensorfusion(maxidx, sonar);
-            
+        //maxidx = sensorfusion(maxidx, sonar_new);
+        cout<<"--------------------------4" << endl;
         if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
             msg.linear.x = 0;
             msg.angular.z = 0;
@@ -230,17 +260,28 @@ void MyP3AT::Loop(){
             write(mc, "$A1M2ID1-090", 13);
             continue;
         }
-        system("sleep 0.5");
+        cout<<"--------------------------5" << endl;
+        
         write(mc, "$A1M2ID1-090", 13);
         
-        std::cout << "Current strongest signal is at: " << maxidx << " " << DOA[maxidx]<< std::endl;
+        cout << "Current strongest signal is at: " << maxidx*9 << " " << DOA[maxidx]<< endl;
         
         //TODO: PID Control
         msg.linear.x = 1; // fixed linear velocity
-        msg.angular.z = -(maxidx-85)*PI/180; // angular.z > 0 : anti-clockwise in radians
-        this->pub_cmdvel.publish(msg);
+        msg.angular.z = -(maxidx*9-90)*PI/180; // angular.z > 0 : anti-clockwise in radians
+        pub_cmdvel.publish(msg);
 
-        system("sleep 0.5");
+        //system("sleep 0.5");
+
+        
+        this_thread::sleep_for(chrono::seconds(1));
+        if(MyP3AT::window.size() >= 3){
+            pop_front();
+        }else if(MyP3AT::window.size() == 0){
+            continue;
+        }
+        DOA.clear();
+
     }
 
 /*
@@ -253,9 +294,9 @@ void MyP3AT::Loop(){
         */
 }
 
-void MyP3AT::serialSetup(std::string port){
+void MyP3AT::serialSetup(string port){
     struct termios newtio;
-    std::string cmd = "stty -F " + port + " 57600";
+    string cmd = "stty -F " + port + " 57600";
 
     system(cmd.c_str());
     mc = open(port.c_str(), O_RDWR | O_NOCTTY);
@@ -281,16 +322,16 @@ void MyP3AT::serialSetup(std::string port){
 }
 
 void MyP3AT::setupAPGraph(){
-    std::string line;
-    std::string name;
-    std::string password;
+    string line;
+    string name;
+    string password;
     int posx, posy;
 
     //Read vertex file
-    std::ifstream aplistfile("/home/yeonju/catkin_ws/src/ARTeleOpROS/aplist.txt");
+    ifstream aplistfile("/home/yeonju/catkin_ws/src/ARTeleOpROS/aplist.txt");
     while(!aplistfile.eof()){
-        std::getline(aplistfile, line, '\n');
-        std::stringstream convertor(line);
+        getline(aplistfile, line, '\n');
+        stringstream convertor(line);
         convertor >> name >> posx >> posy >> password;
         initialAPs.addvertex(name, password, posx, posy);
     }
@@ -301,26 +342,26 @@ void MyP3AT::setupAPGraph(){
         initialAPs.floyd.push_back(element);
         initialAPs.path.push_back(element2);
     }
-    //std::cout<<"Test2"<<std::endl;
+    //cout<<"Test2"<<std::endl;
     for(int i=0; i<initialAPs.count; i++){
         for(int j=0; j<initialAPs.count; j++){
             initialAPs.floyd[i][j] = INF;
             initialAPs.path[i][j] = 0;
         }
     }
-    //std::cout<<"Test3"<<std::endl;
+    //out<<"Test3"<<endl;
     //Read edge file
     int from;
     int to;
     double cost;
-    std::ifstream edgefile("/home/yeonju/catkin_ws/src/ARTeleOpROS/edge.txt");
+    ifstream edgefile("/home/yeonju/catkin_ws/src/ARTeleOpROS/edge.txt");
     while(!edgefile.eof()){
-        std::getline(edgefile, line, '\n');
-        std::stringstream convertor(line);
+        getline(edgefile, line, '\n');
+        stringstream convertor(line);
         convertor >> from >> to >> cost;
         initialAPs.addedge(from, to, cost);
     }
-//std::cout<<"Test4"<<std::endl;
+//cout<<"Test4"<<endl;
 }
 
 int main(int argc, char** argv){
@@ -363,7 +404,7 @@ int main(int argc, char** argv){
         }*/
 
         myrobot.Loop();
-
+        
         disconnectap();
         myrobot.path.pop();
     }

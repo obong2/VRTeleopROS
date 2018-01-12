@@ -19,25 +19,20 @@ public:
     ros::Subscriber sub_pose;
     ros::Publisher pub_cmdvel;                      // publisher to move a robot
     
-//private:
+private:
     double scanWifi(string);                            // Scan near wifi
     void serialSetup(string port);         // Serial Port setup
     void setupAPGraph(); 
     void pathfinding(string);
 
     rosaria::PathName waypoints;                // custom message 
-    
     pair<double, double> currentpose;
-
     pair<string, int> destinationAP;
     
-    
-    
-
-    
 public:
-    static deque<vector<double> > window;     // for moving window average
+    static vector<vector<double> > window;     // for moving window average
     vector<double> sonar;
+    vector<double> sonar_new;
     vector<double> DOA;          // current average
     queue<vertex> path;
     Graph initialAPs;

@@ -1,9 +1,9 @@
 #include <iostream>
 #include <atomic>
 #include <thread>
-#include <deque>
 #include <queue>
 #include <string>
+#include <rosaria/teleop.h>
 using namespace std;
 
 //static const std::string WADAPTER = "wlx00c0ca590adb";
@@ -42,15 +42,19 @@ private:
                 //cout << cur_sig << endl;
                 buff.push_back(cur_sig);
             }
+            //cout<<"aaaa"<<endl;
         }
 
-        //curwindow.push_back(buff);
+        MyP3AT::window.push_back(buff);
+        cout<<" window size in thread: " << MyP3AT::window.size() << endl;
+        cout<< "current buff size: "<< buff.size() <<endl;
+        
         //cout << "Thread RSSI has terminated" <<endl;
     }
 
 private:
     thread tid;
-    vector<int> buff;
+    vector<double> buff;
 
 public:
     atomic_bool condition;
