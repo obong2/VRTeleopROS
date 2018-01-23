@@ -9,6 +9,7 @@
 #define SAFEZONE   2                       // Sonar threshold
 #define INF        99999                          // Initial edge cost
 
+static const bool isTesting = false;
 vector<vector<double> > MyP3AT::window;
 
 void pop_front(){
@@ -128,14 +129,15 @@ void MyP3AT::poseMessageReceived(const nav_msgs::Odometry &msg){
     currentpose.first = msg.pose.pose.position.x;
     currentpose.second = msg.pose.pose.position.y;
 }
-//TODO
-void MyP3AT::pathWaypointsMessageReceived(const rosaria::PathName &msg, map<string, double> requestedAPs){
-    
-      for(int i=0; i<10; i++){
-          cout<< msg.points[i] <<endl;
-          requestedAPs.insert(pair<string, int>(msg.points[i], i));
-      }
 
+void MyP3AT::pathWaypointsMessageReceived(const std_msgs::String &msg, pair<string, int> destinationAP){
+    cout<< msg.points <<endl;
+    destinationAP.first = msg.points;
+    destinationAP.second = 1;
+}
+
+void MyP3AT::movingMessageReceived(const std_msgs::Bool &msg){
+    isMoving = Bool.data;
 }
 
 void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
@@ -177,29 +179,32 @@ void MyP3AT::Init(char * argv){
     
     sub_sonar = nh.subscribe("RosAria/sonar", 1, &MyP3AT::sonarMessageReceived, this);
     sub_pose = nh.subscribe("RosAria/pose", 1, &MyP3AT::poseMessageReceived, this);
+    sub_isMoving = nh.subscribe("RosAria/isMoving", 1, &MyP3AT::movingMessageReceived, this);
     pub_cmdvel = nh.advertise<geometry_msgs::Twist>("RosAria/cmd_vel", 10);
-    boost::shared_ptr<rosaria::PathName const> sharedPtr;
+    boost::shared_ptr<std_msgs::String const> sharedPtr;
 
     initialAPs = Graph();
     
     setupAPGraph();
     
-    /*
-    sharedPtr = ros::topic::waitForMessage<rosaria::PathName>("pathwaypoints", nh);
-    
-    if(sharedPtr == NULL){
-        ROS_ERROR("Failed to get waypoints!");
-        return 1;
+    if(isTesting){
+        sharedPtr = ros::topic::waitForMessage<std_msgs::String>("pathwaypoints", nh);
+        
+        if(sharedPtr == NULL){
+            ROS_ERROR("Failed to get waypoints!");
+            return 1;
+        }
+        else{
+            waypoints = *sharedPtr;
+            pathWaypointsMessageReceived(waypoints, destinationAP);
+            pathfinding(destinationAP.first);
+        }
     }
     else{
-        waypoints = *sharedPtr;
-        pathWaypointsMessageReceived(waypoints, requestedAPs);
+        pathfinding("SMARTAP3");
     }
-    */
     currentpose.first = 0; currentpose.second = 0;
 
-    pathfinding("SMARTAP3");
-    
     /*
     for(int i=0; i<RANGE; i++){
         window.push_back(deque<double>()); //add a deque
@@ -226,7 +231,8 @@ void MyP3AT::Loop(){
     //Follow the cur waypoint until the robot arrives
     while(cur_doa > SIGTHD){
 
-        
+        ros::spinOnce(); //receive sonar sensor, pose,  msg
+        if(!isMoving) continue;
 
         write(mc, "$A1M2ID1+090", 13);
         threadRSSI th;
@@ -246,8 +252,7 @@ void MyP3AT::Loop(){
             //cout<< avg_temp[l] << "    " << var_temp[l] <<endl;
         }
         cout<<"--------------------------3" << endl;
-        ros::spinOnce(); //receive sonar sensor msg
-        cout<<"--------------------------3.5" << endl;
+        
         maxidx = findstrongestsignal(DOA);
         //maxidx = sensorfusion(maxidx, sonar_new);
         cout<<"--------------------------4" << endl;

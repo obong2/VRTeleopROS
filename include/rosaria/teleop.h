@@ -37,6 +37,7 @@ public:
     queue<vertex> path;
     Graph initialAPs;
     int mc;                                   // variable for a serial communication with a motor controller
+    bool isMoving;
 };
 
 
