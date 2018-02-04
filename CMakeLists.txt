@@ -24,7 +24,7 @@ add_compile_options(-std=c++11)
 add_message_files(
   FILES
   BumperState.msg
-  PathName.msg
+  #PathName.msg
   #Measurements.msg
 )
 #uncomment if you have defined services

@@ -6,10 +6,10 @@
 #define kD         0.3                     //D gain
 #define ALPHA      0.5                     //smoothing parameter
 #define SIGTHD     3                       // Threshold
-#define SAFEZONE   2                       // Sonar threshold
+#define SAFEZONE   4                       // Sonar threshold
 #define INF        99999                          // Initial edge cost
 
-static const bool isTesting = false;
+static const bool isTesting = true;
 vector<vector<double> > MyP3AT::window;
 
 void pop_front(){
@@ -78,15 +78,15 @@ int sensorfusion(int cur_max, vector<double> sonar_sensor){
     int result = -1;
     
     while(i>=0 || j<MyP3AT::window[0].size()){
-        //cout<<sonar_sensor[i]<<" " << sonar_sensor[j] <<endl;
+        cout<<sonar_sensor[i]<<" " << sonar_sensor[j] <<endl;
         if(i>=0 && sonar_sensor[i] >= SAFEZONE) {
             result = i;
-            //cout<<"HERE1: " <<result<<endl;
+            cout<<"HERE1: " <<result<<endl;
             break;
         }
         if(j<MyP3AT::window[0].size() && sonar_sensor[j] >= SAFEZONE) {
             result = j;
-            //cout<<"HERE2: " <<result<<endl;
+            cout<<"HERE2: " <<result<<endl;
             break;
         }
         i--;
@@ -131,40 +131,47 @@ void MyP3AT::poseMessageReceived(const nav_msgs::Odometry &msg){
 }
 
 void MyP3AT::pathWaypointsMessageReceived(const std_msgs::String &msg, pair<string, int> destinationAP){
-    cout<< msg.points <<endl;
-    destinationAP.first = msg.points;
-    destinationAP.second = 1;
+    cout<< msg.data <<endl;
+    //destinationAP.first = msg.data;
+    //destinationAP.second = 1;
+    //pair <string, int> test;
+    //test = make_pair(msg.data, 1);
+    //destinationAP = test;
+    pathfinding(msg.data);
 }
 
 void MyP3AT::movingMessageReceived(const std_msgs::Bool &msg){
-    isMoving = Bool.data;
+    isMoving = msg.data;
 }
 
 void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
     double data_prev, data_next;
-    //sonar.clear();
-    //sonar_new.clear();
-    sonar.reserve(185);
+    sonar.clear();
+    sonar_new.clear();
+    
     //sonar_new.reserve(20);
 
-    for(int i=0; i<8; i++){
-        if(msg.points[i].x == 0 && msg.points[i].y == 0) continue; //ignore useless data
+    for(int i=1; i<9; i++){
+        if(msg.points[i-1].x == 0 && msg.points[i-1].y == 0) continue; //ignore useless data
         else{
             
-            data_prev = sqrt(pow(msg.points[i].x, 2) + pow(msg.points[i].y, 2));
-            data_next = sqrt(pow(msg.points[i+1].x, 2) + pow(msg.points[i+1].y, 2));
-            cout<<sqrt(pow(msg.points[i].x, 2) + pow(msg.points[i].y, 2))<<endl;
+            data_prev = sqrt(pow(msg.points[i-1].x, 2) + pow(msg.points[i-1].y, 2));
+            data_next = sqrt(pow(msg.points[i].x, 2) + pow(msg.points[i].y, 2));
+            //cout<<sqrt(pow(msg.points[i-1].x, 2) + pow(msg.points[i-1].y, 2))<<endl;
             //linear interpolation...
-            double frag = (data_next - data_prev)/23;
+            double frag = (data_next - data_prev)/22.5;
             for(int j=0; j<23; j++){
-                sonar[i*23 + j] = data_prev + j*frag;
+                //sonar[i*23 + j] = data_prev + j*frag;
+                sonar.push_back(data_prev + j*frag);
                 //cout<<i*23 + j << ": " << sonar[i*23+j]<<endl;
             }
         }
     }
-    reverse(sonar.begin(), sonar.end());
+    //cout<< "SONAR SIZE ============ "<< sonar.size() << "LAST : " << sonar[sonar.size()-1]<< endl;
+    //reverse(sonar.begin(), sonar.end());
     for(int i=0; i<MyP3AT::window[0].size(); i++){
         sonar_new.push_back(sonar[i*9]);
+        //cout<< "sonar_new["<<i<<"] " <<sonar_new[i] <<endl;
     }
 }
 
@@ -176,11 +183,11 @@ void MyP3AT::pathfinding(string to){
 
 void MyP3AT::Init(char * argv){
     serialSetup(argv);
-    
-    sub_sonar = nh.subscribe("RosAria/sonar", 1, &MyP3AT::sonarMessageReceived, this);
-    sub_pose = nh.subscribe("RosAria/pose", 1, &MyP3AT::poseMessageReceived, this);
-    sub_isMoving = nh.subscribe("RosAria/isMoving", 1, &MyP3AT::movingMessageReceived, this);
-    pub_cmdvel = nh.advertise<geometry_msgs::Twist>("RosAria/cmd_vel", 10);
+    //sub_dest = nh.subscribe("/pathwaypoints", 1000, &pathWaypointsMessageReceived, this);
+    sub_sonar = nh.subscribe("/RosAria/sonar", 1, &MyP3AT::sonarMessageReceived, this);
+    sub_pose = nh.subscribe("/RosAria/pose", 1, &MyP3AT::poseMessageReceived, this);
+    //sub_isMoving = nh.subscribe("/isMoving", 1, &MyP3AT::movingMessageReceived, this);
+    pub_cmdvel = nh.advertise<geometry_msgs::Twist>("/RosAria/cmd_vel", 10);
     boost::shared_ptr<std_msgs::String const> sharedPtr;
 
     initialAPs = Graph();
@@ -188,16 +195,17 @@ void MyP3AT::Init(char * argv){
     setupAPGraph();
     
     if(isTesting){
-        sharedPtr = ros::topic::waitForMessage<std_msgs::String>("pathwaypoints", nh);
-        
+        sharedPtr = ros::topic::waitForMessage<std_msgs::String>("/pathwaypoints", nh);
+        ROS_INFO("%s", "Waiting for the destination input...");
         if(sharedPtr == NULL){
             ROS_ERROR("Failed to get waypoints!");
-            return 1;
+            return;
         }
         else{
             waypoints = *sharedPtr;
             pathWaypointsMessageReceived(waypoints, destinationAP);
-            pathfinding(destinationAP.first);
+            //cout<<"cur dest: " << destinationAP.first << endl;
+            //pathfinding(destinationAP.first);
         }
     }
     else{
@@ -230,18 +238,21 @@ void MyP3AT::Loop(){
         
     //Follow the cur waypoint until the robot arrives
     while(cur_doa > SIGTHD){
-
-        ros::spinOnce(); //receive sonar sensor, pose,  msg
-        if(!isMoving) continue;
-
+        
+        
+        //if(!isMoving) continue;
+        
         write(mc, "$A1M2ID1+090", 13);
         threadRSSI th;
         th.run();
+
         this_thread::sleep_for(chrono::seconds(1));
         th.condition.store(false);
         this_thread::sleep_for(chrono::milliseconds(500));
         cout<< "window size: " << MyP3AT::window.size() <<endl;
-            
+        
+        ros::spinOnce();    
+        
         // Find DOA in 180 degree range
         vector<double> avg_temp, var_temp;
         avg_temp = movingwindowaverage();
@@ -251,11 +262,11 @@ void MyP3AT::Loop(){
             DOA.push_back(ALPHA*avg_temp[l] + (1-ALPHA)*var_temp[l]);
             //cout<< avg_temp[l] << "    " << var_temp[l] <<endl;
         }
-        cout<<"--------------------------3" << endl;
+        //cout<<"--------------------------3" << endl;
         
         maxidx = findstrongestsignal(DOA);
-        //maxidx = sensorfusion(maxidx, sonar_new);
-        cout<<"--------------------------4" << endl;
+        maxidx = sensorfusion(maxidx, sonar_new);
+        //cout<<"--------------------------4" << endl;
         if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
             msg.linear.x = 0;
             msg.angular.z = 0;
@@ -265,7 +276,7 @@ void MyP3AT::Loop(){
             write(mc, "$A1M2ID1-090", 13);
             continue;
         }
-        cout<<"--------------------------5" << endl;
+        //cout<<"--------------------------5" << endl;
         
         write(mc, "$A1M2ID1-090", 13);
         
@@ -289,14 +300,6 @@ void MyP3AT::Loop(){
 
     }
 
-/*
-        std::string tempcmd = "sudo ifconfig " + WADAPTER + " down";
-        system(tempcmd.c_str());
-        tempcmd = "sudo pkill -9 wpa_supplicant";
-        system(tempcmd.c_str());
-        tempcmd = "sudo ifconfig " + WADAPTER + " up";
-        system(tempcmd.c_str());
-        */
 }
 
 void MyP3AT::serialSetup(string port){
@@ -376,7 +379,7 @@ int main(int argc, char** argv){
     MyP3AT myrobot;
     myrobot = MyP3AT();
 
-    //myrobot.points = myrobot.nh.subscribe("pathwaypoints", 1000, &pathWaypointsMessageReceived);
+    
 
     if(argc < 2) {
     ROS_ERROR("%s", "Add port number as a command argument!");

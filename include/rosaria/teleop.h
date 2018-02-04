@@ -1,6 +1,8 @@
 #include <rosaria/PathName.h>
 #include <rosaria/graph.h>
 #include <rosaria/GetWayPoints.h>
+#include <std_msgs/Bool.h>
+#include <std_msgs/String.h>
 using namespace std;
 
 class MyP3AT {
@@ -9,14 +11,17 @@ public:
     void Loop();
     void Init(char*);
     void Terminate();
-    void pathWaypointsMessageReceived(const rosaria::PathName& msg, map<string, double> requestedAPs);
+    void pathWaypointsMessageReceived(const std_msgs::String& msg, pair<string, int> destinationAP);
     void sonarMessageReceived(const sensor_msgs::PointCloud &msg);
     void poseMessageReceived(const nav_msgs::Odometry &msg);
+    void movingMessageReceived(const std_msgs::Bool& msg);
 public:
     ros::NodeHandle nh;                         // Node handler
     ros::Subscriber sub_points;                     // subscriber to get waypoints from COM2 with PathName type message
     ros::Subscriber sub_sonar;                      // subscriber to get sonar sensor values
     ros::Subscriber sub_pose;
+    //ros::Subscriber sub_dest;
+    //ros::Subscriber sub_isMoving;
     ros::Publisher pub_cmdvel;                      // publisher to move a robot
     
 private:
@@ -25,7 +30,7 @@ private:
     void setupAPGraph(); 
     void pathfinding(string);
 
-    rosaria::PathName waypoints;                // custom message 
+    std_msgs::String waypoints;                //
     pair<double, double> currentpose;
     pair<string, int> destinationAP;
     
