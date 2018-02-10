@@ -9,7 +9,7 @@
 #define SAFEZONE   4                       // Sonar threshold
 #define INF        99999                          // Initial edge cost
 
-static const bool isTesting = true;
+static const bool isTesting = false;
 vector<vector<double> > MyP3AT::window;
 
 void pop_front(){
@@ -113,14 +113,19 @@ void connectap(string id, string password){
     */
     a = system(cmd_simple.c_str());
     
+    cmd_simple = "sudo ifconfig " + WADAPTER + " down";
+    system(cmd_simple.c_str());
+    cmd_simple = "sudo ifconfig " + WADAPTER + " up";
+    system(cmd_simple.c_str());
+
     system("sleep 3.0");
     ROS_INFO("%s", "Connected to AP...");
 }
 
 void disconnectap(){
-    string tempcmd = "sudo iwconfig " + WADAPTER + " down";
+    string tempcmd = "sudo ifconfig " + WADAPTER + " down";
     system(tempcmd.c_str());
-    tempcmd = "sudo iwconfig " + WADAPTER + " up";
+    tempcmd = "sudo ifconfig " + WADAPTER + " up";
     system(tempcmd.c_str());
 }
 
@@ -128,6 +133,14 @@ void MyP3AT::poseMessageReceived(const nav_msgs::Odometry &msg){
     cout<< "Pose: x = " << msg.pose.pose.position.x << "y = " << msg.pose.pose.position.y <<endl;
     currentpose.first = msg.pose.pose.position.x;
     currentpose.second = msg.pose.pose.position.y;
+
+    ofstream POSErecordfile("/home/yeonju/catkin_ws/poserecord.txt", ios::app);
+    //ostream_iterator<double> sonaroutput_iterator(POSErecordfile, "\t");
+
+    POSErecordfile << currentpose.first << "\t" << currentpose.second << "\n";
+    POSErecordfile.flush();
+
+    POSErecordfile.close();
 }
 
 void MyP3AT::pathWaypointsMessageReceived(const std_msgs::String &msg, pair<string, int> destinationAP){
@@ -146,6 +159,9 @@ void MyP3AT::movingMessageReceived(const std_msgs::Bool &msg){
 
 void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
     double data_prev, data_next;
+    ofstream SONARrecordfile("/home/yeonju/catkin_ws/sonarmeasure.txt", ios::app);
+    ostream_iterator<double> sonaroutput_iterator(SONARrecordfile, "\t");
+
     sonar.clear();
     sonar_new.clear();
     
@@ -170,14 +186,19 @@ void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
     //cout<< "SONAR SIZE ============ "<< sonar.size() << "LAST : " << sonar[sonar.size()-1]<< endl;
     //reverse(sonar.begin(), sonar.end());
     for(int i=0; i<MyP3AT::window[0].size(); i++){
-        sonar_new.push_back(sonar[i*9]);
+        sonar_new.push_back(sonar[i*5]);
         //cout<< "sonar_new["<<i<<"] " <<sonar_new[i] <<endl;
     }
+    copy(sonar_new.begin(), sonar_new.end(), sonaroutput_iterator);
+    SONARrecordfile << '\n';
+    SONARrecordfile.close();
 }
 
 void MyP3AT::pathfinding(string to){
     initialAPs.pathfindingFloyd();
+    //cout << currentpose.first << "\t" << currentpose.second << endl;
     string from = initialAPs.closestNode(currentpose.first, currentpose.second);
+    //cout<< "STARTFROM: " << from <<endl;
     path = initialAPs.returnPath(from, to);
 }
 
@@ -209,17 +230,9 @@ void MyP3AT::Init(char * argv){
         }
     }
     else{
-        pathfinding("SMARTAP3");
+        pathfinding("SMARTAP1");
     }
     currentpose.first = 0; currentpose.second = 0;
-
-    /*
-    for(int i=0; i<RANGE; i++){
-        window.push_back(deque<double>()); //add a deque
-        for(int j=0; j<WINDOWSIZE-1; j++) window[i].push_back(0);
-        //DOA.push_back(100);
-    }
-*/
 }
 
 void MyP3AT::Terminate(){
@@ -230,15 +243,17 @@ void MyP3AT::Terminate(){
 void MyP3AT::Loop(){
     int maxidx;
     double cur_doa = 100;
+    ofstream DOArecordfile("/home/yeonju/catkin_ws/doarecord.txt", ios::app);
+    
 
     geometry_msgs::Twist msg;
       
     msg.angular.z = 0;
     msg.linear.x = 0;
-        
+    vector<int> doa_temp_record;
     //Follow the cur waypoint until the robot arrives
     while(cur_doa > SIGTHD){
-        
+        doa_temp_record.clear();
         
         //if(!isMoving) continue;
         
@@ -265,7 +280,11 @@ void MyP3AT::Loop(){
         //cout<<"--------------------------3" << endl;
         
         maxidx = findstrongestsignal(DOA);
+        doa_temp_record.push_back(maxidx*(180/MyP3AT::window[0].size()));
+        //DOArecordfile << maxidx*(180/MyP3AT::window[0].size()) << '\t';
         maxidx = sensorfusion(maxidx, sonar_new);
+        doa_temp_record.push_back(maxidx*(180/MyP3AT::window[0].size()));
+        //DOArecordfile << maxidx*(180/MyP3AT::window[0].size()) << '\n';
         //cout<<"--------------------------4" << endl;
         if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
             msg.linear.x = 0;
@@ -280,11 +299,11 @@ void MyP3AT::Loop(){
         
         write(mc, "$A1M2ID1-090", 13);
         
-        cout << "Current strongest signal is at: " << maxidx*9 << " " << DOA[maxidx]<< endl;
+        cout << "Current strongest signal is at: " << maxidx*(180/MyP3AT::window[0].size()) << " " << DOA[maxidx]<< endl;
         
         //TODO: PID Control
         msg.linear.x = 1; // fixed linear velocity
-        msg.angular.z = -(maxidx*9-90)*PI/180; // angular.z > 0 : anti-clockwise in radians
+        msg.angular.z = -(maxidx*5-90)*PI/180; // angular.z > 0 : anti-clockwise in radians
         pub_cmdvel.publish(msg);
 
         //system("sleep 0.5");
@@ -297,9 +316,12 @@ void MyP3AT::Loop(){
             continue;
         }
         DOA.clear();
-
+        ostream_iterator<int> doaoutput_iterator(DOArecordfile, "\t");
+        copy(doa_temp_record.begin(), doa_temp_record.end(), doaoutput_iterator);
+        DOArecordfile<<"\n";
+        DOArecordfile.flush();
     }
-
+    DOArecordfile.close();
 }
 
 void MyP3AT::serialSetup(string port){
@@ -319,14 +341,19 @@ void MyP3AT::serialSetup(string port){
     newtio.c_cc[VTIME] = 0;
     newtio.c_cc[VMIN] = 1;
 
+    if (mc < 0){
+        ROS_INFO("%s", "ERROR");
+        return;
+    }
     tcflush (mc, TCIFLUSH);
     tcsetattr(mc, TCSANOW, &newtio);
 
-    ROS_INFO("%s", "Serial Port is opend!");
 
     //change speed
     write(mc, "$A1M3ID1-400", 13);
-    
+
+    ROS_INFO("%s", "Serial Port is opend!");
+
 }
 
 void MyP3AT::setupAPGraph(){
@@ -386,6 +413,7 @@ int main(int argc, char** argv){
     return (1);
     }
     else{
+        //cout<<argv[1]<<endl;
     myrobot.Init(argv[1]);
     ROS_INFO("%s", "Initialization is done!");
     }
