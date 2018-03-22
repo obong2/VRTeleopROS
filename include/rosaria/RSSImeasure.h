@@ -29,19 +29,20 @@ private:
         double cur_sig;
         string line;
         
-        string cmd = "iwconfig " + WADAPTER + " | grep Signal| cut -d - -f2 | cut -d ' ' -f 1 > sig_temp.txt";
+        string cmd = "iwconfig "+ WADAPTER +" | grep Signal| cut -d - -f2 | cut -d ' ' -f 1 > sig_temp.txt";
         ofstream RSSrecordfile("/home/yeonju/catkin_ws/rssmeasures.txt", ios::app);
         //cout << "Thread RSSI has started" <<endl;
         while(condition){
             system(cmd.c_str());
-            this_thread::sleep_for(chrono::milliseconds(50));
             ifstream tempfile("/home/yeonju/catkin_ws/sig_temp.txt");
+            this_thread::sleep_for(chrono::milliseconds(100));
+            
         
             while(!tempfile.eof()){
                 std::getline(tempfile, line, '\n');
                 std::stringstream convertor(line);
                 convertor >> cur_sig;
-                //cout << cur_sig << endl;
+                //cout <<"??" << line <<" asasa  "<< cur_sig << endl;
                 
                 buff.push_back(cur_sig);
             }

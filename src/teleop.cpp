@@ -2,11 +2,11 @@
 #include <rosaria/RSSImeasure.h>
 
 #define PI         3.14159265358979323846  /* pi */
-#define kP         1                       //P gain
-#define kD         0.3                     //D gain
-#define ALPHA      0.5                     //smoothing parameter
-#define SIGTHD     3                       // Threshold
-#define SAFEZONE   4                       // Sonar threshold
+
+#define ALPHA      0.7                     //smoothing parameter
+#define SIGTHD     4.5                       // Threshold
+#define SIGTHD2    30
+#define SAFEZONE   5.1                       // Sonar threshold
 #define INF        99999                          // Initial edge cost
 
 static const bool isTesting = false;
@@ -19,7 +19,7 @@ void pop_front(){
 
 vector<double> movingwindowaverage(){
     double sum = 0;
-    int size = MyP3AT::window[0].size();
+    int size = 20;
     //vector<double>::iterator j;
     //vector<vector<double> >::iterator i;
     int i, j;
@@ -29,6 +29,7 @@ vector<double> movingwindowaverage(){
         sum = 0;
         for(j=0; j<MyP3AT::window.size(); j++){
             sum+= MyP3AT::window[j][i];
+            //cout<<MyP3AT::window[j][i]<<endl;
         }
         result.push_back(sum/size);
     }
@@ -38,7 +39,7 @@ vector<double> movingwindowaverage(){
 
 vector<double> movingwindowvariance(vector<double> avg){
     double sum = 0;
-    int size = MyP3AT::window[0].size();
+    int size = 20;
     int k;
     int i, j;
     vector<double> result;
@@ -62,7 +63,7 @@ int findstrongestsignal(vector<double> arr){
     //vector<double>::iterator j;
     min = arr[0];
     minidx = 0;
-    for(int i=1; i < arr.size(); i++){
+    for(int i=1; i < 20; i++){
         //std::cout<< arr[i] <<std::endl;
         if(arr[i] < min){
             min = arr[i];
@@ -77,23 +78,26 @@ int sensorfusion(int cur_max, vector<double> sonar_sensor){
     int j=cur_max;
     int result = -1;
     
-    while(i>=0 || j<MyP3AT::window[0].size()){
-        cout<<sonar_sensor[i]<<" " << sonar_sensor[j] <<endl;
-        if(i>=0 && sonar_sensor[i] >= SAFEZONE) {
-            result = i;
-            cout<<"HERE1: " <<result<<endl;
-            break;
-        }
-        if(j<MyP3AT::window[0].size() && sonar_sensor[j] >= SAFEZONE) {
+    while(i>=0 || j<20){
+        //cout<<i<<":"<<j <<" " <<sonar_sensor[i]<<" " << sonar_sensor[j] <<endl;
+
+        if(j<20 && sonar_sensor[j-1] >= SAFEZONE && sonar_sensor[j+1] >= SAFEZONE) {
             result = j;
             cout<<"HERE2: " <<result<<endl;
             break;
         }
+
+        if(i>0 && sonar_sensor[i+1] >= SAFEZONE && sonar_sensor[i-1] >= SAFEZONE) {
+            result = i;
+            cout<<"HERE1: " <<result<<endl;
+            break;
+        }
+        
         i--;
         j++;
     }
     
-    return result; //if we cannot find any possible idx
+    return result+2; //if we cannot find any possible idx
 }
 
 void connectap(string id, string password){
@@ -113,10 +117,10 @@ void connectap(string id, string password){
     */
     a = system(cmd_simple.c_str());
     
-    cmd_simple = "sudo ifconfig " + WADAPTER + " down";
-    system(cmd_simple.c_str());
-    cmd_simple = "sudo ifconfig " + WADAPTER + " up";
-    system(cmd_simple.c_str());
+    //cmd_simple = "sudo ifconfig " + WADAPTER + " down";
+    //system(cmd_simple.c_str());
+    //cmd_simple = "sudo ifconfig " + WADAPTER + " up";
+    //system(cmd_simple.c_str());
 
     system("sleep 3.0");
     ROS_INFO("%s", "Connected to AP...");
@@ -185,8 +189,9 @@ void MyP3AT::sonarMessageReceived(const sensor_msgs::PointCloud &msg){
     }
     //cout<< "SONAR SIZE ============ "<< sonar.size() << "LAST : " << sonar[sonar.size()-1]<< endl;
     //reverse(sonar.begin(), sonar.end());
-    for(int i=0; i<MyP3AT::window[0].size(); i++){
-        sonar_new.push_back(sonar[i*5]);
+    for(int i=0; i<20; i++){
+        //cout<<sonar[i*9]<<endl;
+        sonar_new.push_back(sonar[i*9]);
         //cout<< "sonar_new["<<i<<"] " <<sonar_new[i] <<endl;
     }
     copy(sonar_new.begin(), sonar_new.end(), sonaroutput_iterator);
@@ -230,9 +235,19 @@ void MyP3AT::Init(char * argv){
         }
     }
     else{
-        pathfinding("SMARTAP1");
+        pathfinding("SMARTAP3");
     }
     currentpose.first = 0; currentpose.second = 0;
+
+    ofstream DOArecordfile("/home/yeonju/catkin_ws/doarecord.txt", ios::trunc);
+    ofstream SONARrecordfile("/home/yeonju/catkin_ws/sonarmeasure.txt", ios::trunc);
+    ofstream RSSrecordfile("/home/yeonju/catkin_ws/rssmeasures.txt", ios::trunc);
+    ofstream POSErecordfile("/home/yeonju/catkin_ws/poserecord.txt", ios::trunc);
+
+    DOArecordfile.close();
+    SONARrecordfile.close();
+    RSSrecordfile.close();
+    POSErecordfile.close();
 }
 
 void MyP3AT::Terminate(){
@@ -242,6 +257,7 @@ void MyP3AT::Terminate(){
 
 void MyP3AT::Loop(){
     int maxidx;
+    int test=0;
     double cur_doa = 100;
     ofstream DOArecordfile("/home/yeonju/catkin_ws/doarecord.txt", ios::app);
     
@@ -252,6 +268,7 @@ void MyP3AT::Loop(){
     msg.linear.x = 0;
     vector<int> doa_temp_record;
     //Follow the cur waypoint until the robot arrives
+    if(path.size() > 1){
     while(cur_doa > SIGTHD){
         doa_temp_record.clear();
         
@@ -280,10 +297,10 @@ void MyP3AT::Loop(){
         //cout<<"--------------------------3" << endl;
         
         maxidx = findstrongestsignal(DOA);
-        doa_temp_record.push_back(maxidx*(180/MyP3AT::window[0].size()));
+        doa_temp_record.push_back(maxidx*9);
         //DOArecordfile << maxidx*(180/MyP3AT::window[0].size()) << '\t';
         maxidx = sensorfusion(maxidx, sonar_new);
-        doa_temp_record.push_back(maxidx*(180/MyP3AT::window[0].size()));
+        doa_temp_record.push_back(maxidx*9);
         //DOArecordfile << maxidx*(180/MyP3AT::window[0].size()) << '\n';
         //cout<<"--------------------------4" << endl;
         if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
@@ -293,17 +310,26 @@ void MyP3AT::Loop(){
 
             system("sleep 0.5");
             write(mc, "$A1M2ID1-090", 13);
+            if(MyP3AT::window.size() >= 3){
+                pop_front();
+            }else if(MyP3AT::window.size() == 0){
+                continue;
+            }
+            cur_doa = 100;
             continue;
         }
         //cout<<"--------------------------5" << endl;
         
         write(mc, "$A1M2ID1-090", 13);
         
-        cout << "Current strongest signal is at: " << maxidx*(180/MyP3AT::window[0].size()) << " " << DOA[maxidx]<< endl;
-        
+        cout << "Current strongest signal is at: " << maxidx*(9) << " " << DOA[maxidx]<< endl;
+        if(test < 3)cur_doa = 100;
+        else        cur_doa = DOA[maxidx];
+
+        test++;
         //TODO: PID Control
         msg.linear.x = 1; // fixed linear velocity
-        msg.angular.z = -(maxidx*5-90)*PI/180; // angular.z > 0 : anti-clockwise in radians
+        msg.angular.z = -1*(maxidx*9-90)*PI/180; // angular.z > 0 : anti-clockwise in radians
         pub_cmdvel.publish(msg);
 
         //system("sleep 0.5");
@@ -320,7 +346,91 @@ void MyP3AT::Loop(){
         copy(doa_temp_record.begin(), doa_temp_record.end(), doaoutput_iterator);
         DOArecordfile<<"\n";
         DOArecordfile.flush();
+        //test++;
     }
+    }
+    else{
+        while(cur_doa > SIGTHD2){
+        doa_temp_record.clear();
+        
+        //if(!isMoving) continue;
+        
+        write(mc, "$A1M2ID1+090", 13);
+        threadRSSI th;
+        th.run();
+
+        this_thread::sleep_for(chrono::seconds(1));
+        th.condition.store(false);
+        this_thread::sleep_for(chrono::milliseconds(500));
+        cout<< "window size: " << MyP3AT::window.size() <<endl;
+        
+        ros::spinOnce();    
+        
+        // Find DOA in 180 degree range
+        vector<double> avg_temp, var_temp;
+        avg_temp = movingwindowaverage();
+        var_temp = movingwindowvariance(avg_temp);
+        
+        for(int l=0; l<avg_temp.size(); l++){
+            DOA.push_back(ALPHA*avg_temp[l] + (1-ALPHA)*var_temp[l]);
+            //cout<< avg_temp[l] << "    " << var_temp[l] <<endl;
+        }
+        //cout<<"--------------------------3" << endl;
+        
+        maxidx = findstrongestsignal(DOA);
+        doa_temp_record.push_back(maxidx*9);
+        //DOArecordfile << maxidx*(180/MyP3AT::window[0].size()) << '\t';
+        maxidx = sensorfusion(maxidx, sonar_new);
+        doa_temp_record.push_back(maxidx*9);
+        //DOArecordfile << maxidx*(180/MyP3AT::window[0].size()) << '\n';
+        //cout<<"--------------------------4" << endl;
+        if(maxidx == -1) { //based on sonar sensor, if there is no available direction...
+            msg.linear.x = 0;
+            msg.angular.z = 0;
+            pub_cmdvel.publish(msg);
+
+            system("sleep 0.5");
+            write(mc, "$A1M2ID1-090", 13);
+            if(MyP3AT::window.size() >= 3){
+                pop_front();
+            }else if(MyP3AT::window.size() == 0){
+                continue;
+            }
+            cur_doa = 100;
+            continue;
+        }
+        //cout<<"--------------------------5" << endl;
+        
+        write(mc, "$A1M2ID1-090", 13);
+        
+        cout << "Current strongest signal is at: " << maxidx*(9) << " " << DOA[maxidx]<< endl;
+        if(test < 3)cur_doa = 100;
+        else        cur_doa = DOA[maxidx];
+
+        test++;
+        //TODO: PID Control
+        msg.linear.x = 1; // fixed linear velocity
+        msg.angular.z = -1*(maxidx*9-90)*PI/180; // angular.z > 0 : anti-clockwise in radians
+        pub_cmdvel.publish(msg);
+
+        //system("sleep 0.5");
+
+        
+        this_thread::sleep_for(chrono::seconds(1));
+        if(MyP3AT::window.size() >= 3){
+            pop_front();
+        }else if(MyP3AT::window.size() == 0){
+            continue;
+        }
+        DOA.clear();
+        ostream_iterator<int> doaoutput_iterator(DOArecordfile, "\t");
+        copy(doa_temp_record.begin(), doa_temp_record.end(), doaoutput_iterator);
+        DOArecordfile<<"\n";
+        DOArecordfile.flush();
+        //test++;
+    }
+    }
+    
     DOArecordfile.close();
 }
 
@@ -406,7 +516,7 @@ int main(int argc, char** argv){
     MyP3AT myrobot;
     myrobot = MyP3AT();
 
-    
+    disconnectap();    
 
     if(argc < 2) {
     ROS_ERROR("%s", "Add port number as a command argument!");
@@ -419,7 +529,7 @@ int main(int argc, char** argv){
     }
 
     while(!myrobot.path.empty()){
-        int maxidx;
+        //int maxidx;
 
         write(myrobot.mc, "$A1M2ID1-090", 13); // move antenna to the most left side
         system("sleep 1.0");
@@ -428,7 +538,7 @@ int main(int argc, char** argv){
         vertex cur_waypoint = myrobot.path.front();
         connectap(cur_waypoint.name, cur_waypoint.password);
         // Re-initialize local variables
-        maxidx = 0;
+        //maxidx = 0;
         myrobot.DOA.clear();
         myrobot.sonar.clear();
         /*
